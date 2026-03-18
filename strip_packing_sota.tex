@@ -1,0 +1,178 @@
+\documentclass[11pt,a4paper]{article}
+
+% Package imports
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage{hyperref}
+\usepackage{authblk}
+
+% Title and author information
+\title{\textbf{Two-Dimensional Strip Packing Problem:\\State of the Art and Benchmark Instances}}
+
+\author[1]{Your Name}
+\affil[1]{Department/Institution}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This paper presents a comprehensive state-of-the-art review of the two-dimensional strip packing problem, a well-known NP-hard combinatorial optimization problem with significant applications in manufacturing and logistics. We survey the major methodological approaches including exact algorithms, constructive heuristics, and metaheuristic techniques that have been developed over the past decades. Additionally, we identify and describe the standard benchmark instances used by the research community for algorithm evaluation, including the classical datasets from Bengtsson, Berkey \& Wang, and Martello \& Vigo. This review provides researchers and practitioners with a consolidated overview of solution techniques and evaluation frameworks for the strip packing problem.
+\end{abstract}
+
+\section{Introduction}
+
+The two-dimensional strip packing problem represents a fundamental challenge in combinatorial optimization with widespread practical applications. From minimizing waste in industrial cutting processes to optimizing warehouse space utilization, this problem has attracted sustained research attention since it was first formally studied by Baker et al. \cite{baker1980}. The computational complexity of the problem, combined with its practical importance, has motivated the development of diverse solution approaches ranging from exact methods to sophisticated metaheuristics.
+
+\section{Strip Packing Problem: State of the Art}
+
+\subsection{Problem Definition}
+
+The Two-Dimensional Strip Packing Problem (2SP) is a well-studied combinatorial optimization problem with numerous real-world applications in manufacturing industries, particularly in waste minimization for wood, glass, and textile production, as well as in warehouse loading and scheduling problems \cite{lodi2002,augustine2006}. The problem was proven to be NP-hard by Baker et al. \cite{baker1980}, as it can be reduced to the one-dimensional bin packing problem.
+
+Formally, the input to the 2SP consists of a set $I = \{1, 2, \ldots, n\}$ of $n$ rectangles, each characterized by a specific width $w_i$ and height $h_i$, along with the fixed width $W$ of the strip. The objective is to place all rectangles into the strip with the given width $W$ and unlimited height, minimizing the total strip height $H$ required for the packing. The location of each rectangle $i$ in the strip is represented by the coordinates $(x_i, y_i)$ of its bottom-left corner. The problem can be formulated mathematically as follows:
+
+\begin{align*}
+\min \quad & H \\
+\text{s.t.} \quad & x_i + w_i \leq W, \quad \forall i \in I \\
+& y_i + h_i \leq H, \quad \forall i \in I \\
+& x_i + w_i \leq x_j \text{ or } x_j + w_j \leq x_i \text{ or } \\
+& y_i + h_i \leq y_j \text{ or } y_j + h_j \leq y_i, \quad \forall i, j \in I, i \neq j \\
+& x_i, y_i \geq 0, \quad \forall i \in I
+\end{align*}
+
+Although the problem can be straightforwardly modeled in linear or constraint programming frameworks, the number of constraints grows with the number of rectangles, and even for relatively simple instances, the constraint sets introduce substantial computational complexity. This complexity explains why exact algorithms, while capable of finding optimal solutions, often fail to deliver results within reasonable time frames for large-scale instances.
+
+\subsection{Existing Approaches}
+
+The difficulty in solving the strip packing problem optimally has motivated researchers to develop a wide range of solution approaches. According to the No Free Lunch theorem \cite{wolpert1997}, no single algorithm outperforms all others across all possible problem instances. Consequently, the literature presents diverse methodologies, each with strengths for particular instance characteristics.
+
+\subsubsection{Exact Methods}
+
+Exact algorithms guarantee optimal solutions but are limited by computational resources. Martello and Vigo \cite{martello1998} developed exact solution methods for the two-dimensional finite bin packing problem, which can be adapted to strip packing. Their approach uses branch-and-bound techniques with sophisticated dominance criteria and lower bounds. While exact methods are valuable for benchmarking and solving small to medium-sized instances, they become impractical for larger problem sizes due to their exponential time complexity.
+
+\subsubsection{Constructive Heuristics}
+
+Constructive heuristics build solutions incrementally by placing one rectangle at a time according to specific placement rules. Baker et al. \cite{baker1980} pioneered this area by introducing the Bottom-Left (BL) heuristic, which places each new rectangle as low as possible in the strip and then as far left as it can fit. This simple yet effective approach established the foundation for many subsequent methods.
+
+The Bottom-Left-Fill algorithm \cite{chazelle1983} extends the BL approach by attempting to fill gaps in the packing. Another influential family of heuristics is based on the Guillotine algorithm \cite{jylanki2010}, which uses a binary tree data structure to track remaining space. After each rectangle placement, the algorithm divides the problem into two smaller subproblems, creating a hierarchical decomposition of the available space.
+
+Burke et al. \cite{burke2004} proposed the Best-Fit heuristic, which includes a sophisticated evaluation step to determine the next rectangle to place based on how well its dimensions fill existing gaps. This approach aims to minimize wasted space by carefully selecting both the item to place and its position. Zhang et al. \cite{zhang2006,zhang2016} developed priority-based heuristics that assign priorities to unplaced rectangles based on how well they fit into the current configuration, recursively placing the highest-priority item until all rectangles are packed.
+
+\subsubsection{Metaheuristic Approaches}
+
+Given the computational limitations of exact methods and the solution quality limitations of simple heuristics, metaheuristic approaches have emerged as powerful alternatives. These methods explore the solution space more broadly, often achieving near-optimal solutions in reasonable time.
+
+Genetic algorithms have been particularly successful for the strip packing problem. Jakobs \cite{jakobs1996} introduced a seminal approach where chromosomes represent permutations of rectangles, and the fitness function evaluates the strip height obtained by a deterministic placement algorithm. Gomez and de la Fuente \cite{gomez1999} further developed this approach by combining genetic evolution with greedy placement heuristics. The key insight is that the order in which rectangles are considered significantly influences the final solution quality, and evolutionary algorithms can effectively explore the space of possible orderings.
+
+Illich et al. \cite{illich2007} proposed a multi-objective evolutionary approach that considers not only the strip height but also the number of independent cuts required, which is relevant for practical manufacturing constraints. Their work demonstrates how metaheuristics can naturally incorporate multiple optimization criteria.
+
+Beyond genetic algorithms, researchers have explored various other metaheuristic frameworks including simulated annealing, tabu search, and hybrid approaches. A comprehensive survey by Lodi et al. \cite{lodi2002} provides an overview of heuristic and metaheuristic methods for both bin packing and strip packing problems.
+
+\subsubsection{Algorithm Selection and Machine Learning}
+
+Recent research has recognized that different algorithms perform best on different instance types. This observation, grounded in the No Free Lunch theorem \cite{wolpert1997}, has led to the development of algorithm selection systems. Rakotonirainy \cite{rakotonirainy2020} proposed a machine learning framework for selecting metaheuristic algorithms based on instance features. Similarly, Ivanschitz \cite{ivanschitz2017} analyzed instance characteristics to predict algorithm performance for two-dimensional bin packing problems.
+
+These approaches extract features from problem instances—such as statistical properties of item dimensions, ratios, and heterogeneity measures—and train predictive models to estimate algorithm performance. The algorithm selection paradigm, initially formulated by Rice \cite{rice1976}, has proven highly successful in various combinatorial optimization domains \cite{xu2008,kerschke2018,kerschke2019}.
+
+\subsection{Benchmark Instances}
+
+Rigorous evaluation of packing algorithms requires standardized benchmark instances that represent diverse problem characteristics. The research community has established several benchmark sets over the years.
+
+\subsubsection{Classical Benchmarks}
+
+The Bengtsson \cite{bengtsson1982} benchmark set contains 10 instances with 20--200 rectangles and strip widths ranging from 25 to 40. These instances were among the earliest standardized test cases for strip packing algorithms.
+
+Berkey and Wang \cite{berkey1987} introduced a widely-used benchmark consisting of 6 classes with varying item sizes and quantities (20--100 items per instance). Their dataset includes 300 instances generated with different distributions: uniform random dimensions, and correlated width-height relationships. The strip width varies from 10 to 100, providing a range of problem scales.
+
+Martello and Vigo \cite{martello1998} contributed 200 benchmark instances derived from bin packing problems and adapted for strip packing. These instances with 20--100 rectangles and strip widths of 10--100 have become standard for evaluating exact and heuristic algorithms.
+
+\subsubsection{Instance Generators}
+
+To evaluate algorithm robustness and scalability, researchers use problem generators that can create instances with controlled characteristics. Silva et al. \cite{silva2014} developed 2DCPackGen, a comprehensive generator for two-dimensional rectangular cutting and packing problems that allows systematic exploration of the instance space.
+
+\subsubsection{Performance Evaluation}
+
+Algorithm performance is typically assessed using multiple metrics. The primary objective is minimizing the strip height $H$. Computation time is critical for practical applications, especially when algorithms must run in real-time production environments. For comparing against optimal solutions, researchers compute the gap to lower bounds as $(UB - LB) / LB \times 100\%$, where $UB$ is the upper bound (solution found) and $LB$ is a theoretical or computed lower bound. Success rates indicate the percentage of instances solved optimally or within a specified tolerance.
+
+\begin{thebibliography}{99}
+
+\bibitem{augustine2006}
+J. Augustine, S. Banerjee, S. Irani, ``Strip packing with precedence constraints and strip packing with release times,'' in \textit{Proceedings of the Eighteenth Annual ACM Symposium on Parallelism in Algorithms and Architectures}, 2006, pp. 180--189.
+
+\bibitem{baker1980}
+B. S. Baker, E. G. Coffman Jr., R. L. Rivest, ``Orthogonal packings in two dimensions,'' \textit{SIAM Journal on Computing}, vol. 9, no. 4, pp. 846--855, 1980.
+
+\bibitem{bengtsson1982}
+B. E. Bengtsson, ``Packing rectangular pieces—A heuristic approach,'' \textit{The Computer Journal}, vol. 25, no. 3, pp. 353--357, 1982.
+
+\bibitem{berkey1987}
+J. O. Berkey, P. Y. Wang, ``Two-dimensional finite bin-packing algorithms,'' \textit{Journal of the Operational Research Society}, vol. 38, no. 5, pp. 423--429, 1987.
+
+\bibitem{burke2004}
+E. K. Burke, G. Kendall, G. Whitwell, ``A new placement heuristic for the orthogonal stock-cutting problem,'' \textit{Operations Research}, vol. 52, no. 4, pp. 655--671, 2004.
+
+\bibitem{chazelle1983}
+B. Chazelle, ``The bottom-left bin-packing heuristic: An efficient implementation,'' \textit{IEEE Transactions on Computers}, vol. 32, no. 8, pp. 697--707, 1983.
+
+\bibitem{gomez1999}
+A. Gomez, D. de la Fuente, ``Solving the packing and strip-packing problems with genetic algorithms,'' in \textit{International Work-Conference on Artificial Neural Networks}, Springer, 1999, pp. 709--718.
+
+\bibitem{illich2007}
+S. Illich, L. While, L. Barone, ``Multi-objective strip packing using an evolutionary algorithm,'' in \textit{2007 IEEE Congress on Evolutionary Computation}, IEEE, 2007, pp. 4207--4214.
+
+\bibitem{ivanschitz2017}
+B. P. Ivanschitz, ``Algorithm selection and runtime prediction for the two dimensional bin packing problem: Analysis and characterization of instances,'' Ph.D. dissertation, Wien, 2017.
+
+\bibitem{jakobs1996}
+S. Jakobs, ``On genetic algorithms for the packing of polygons,'' \textit{European Journal of Operational Research}, vol. 88, no. 1, pp. 165--181, 1996.
+
+\bibitem{jylanki2010}
+J. Jyl\"{a}nki, ``A thousand ways to pack the bin—A practical approach to two-dimensional rectangle bin packing,'' 2010. [Online]. Available: http://clb.demon.fi/files/RectangleBinPack.pdf
+
+\bibitem{kerschke2018}
+P. Kerschke, L. Kotthoff, J. Bossek, H. H. Hoos, H. Trautmann, ``Leveraging TSP solver complementarity through machine learning,'' \textit{Evolutionary Computation}, vol. 26, no. 4, pp. 597--620, 2018.
+
+\bibitem{kerschke2019}
+P. Kerschke, H. H. Hoos, F. Neumann, H. Trautmann, ``Automated algorithm selection: Survey and perspectives,'' \textit{Evolutionary Computation}, vol. 27, no. 1, pp. 3--45, 2019.
+
+\bibitem{lodi2002}
+A. Lodi, S. Martello, M. Monaci, ``Two-dimensional packing problems: A survey,'' \textit{European Journal of Operational Research}, vol. 141, no. 2, pp. 241--252, 2002.
+
+\bibitem{martello1998}
+S. Martello, D. Vigo, ``Exact solution of the two-dimensional finite bin packing problem,'' \textit{Management Science}, vol. 44, no. 3, pp. 388--399, 1998.
+
+\bibitem{rakotonirainy2020}
+R. G. Rakotonirainy, ``A machine learning approach for automated strip packing algorithm selection,'' \textit{ORiON}, vol. 36, no. 2, 2020.
+
+\bibitem{rice1976}
+J. R. Rice, ``The algorithm selection problem,'' in \textit{Advances in Computers}, vol. 15, Elsevier, 1976, pp. 65--118.
+
+\bibitem{silva2014}
+E. Silva, J. F. Oliveira, G. W\"{a}scher, ``2DCPackGen: A problem generator for two-dimensional rectangular cutting and packing problems,'' \textit{European Journal of Operational Research}, vol. 237, no. 3, pp. 846--856, 2014.
+
+\bibitem{wolpert1997}
+D. H. Wolpert, W. G. Macready, ``No free lunch theorems for optimization,'' \textit{IEEE Transactions on Evolutionary Computation}, vol. 1, no. 1, pp. 67--82, 1997.
+
+\bibitem{xu2008}
+L. Xu, F. Hutter, H. H. Hoos, K. Leyton-Brown, ``SATzilla: Portfolio-based algorithm selection for SAT,'' \textit{Journal of Artificial Intelligence Research}, vol. 32, pp. 565--606, 2008.
+
+\bibitem{zhang2006}
+D. Zhang, Y. Kang, A. Deng, ``A new heuristic recursive algorithm for the strip rectangular packing problem,'' \textit{Computers \& Operations Research}, vol. 33, no. 8, pp. 2209--2217, 2006.
+
+\bibitem{zhang2016}
+D. Zhang, L. Shi, S. C. Leung, T. Wu, ``A priority heuristic for the guillotine rectangular packing problem,'' \textit{Information Processing Letters}, vol. 116, no. 1, pp. 15--21, 2016.
+
+\end{thebibliography}
+
+\section{Conclusion}
+
+The two-dimensional strip packing problem continues to be an active area of research due to its theoretical complexity and practical relevance. This review has highlighted the diverse range of approaches developed over the years, from exact methods suitable for small instances to efficient heuristics and sophisticated metaheuristics for larger problems. The availability of standardized benchmark instances has facilitated meaningful comparison of algorithms and driven progress in the field. Recent developments in algorithm selection and machine learning-based approaches suggest promising directions for future research, particularly in developing adaptive systems that can automatically select the most appropriate solution method based on instance characteristics.
+
+\end{document}
