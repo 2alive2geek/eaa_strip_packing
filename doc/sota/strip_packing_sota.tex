@@ -6,24 +6,21 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{graphicx}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
 \usepackage{cite}
-\usepackage{hyperref}
 \usepackage{authblk}
 
 % Title and author information
 \title{\textbf{Two-Dimensional Strip Packing Problem:\\State of the Art and Benchmark Instances}}
 
-\author[1]{Your Name}
-\affil[1]{Department/Institution}
-
-\date{\today}
-
+\author {Andrei Mărisac}
+\date{}
 \begin{document}
 
 \maketitle
 
 \begin{abstract}
-This paper presents a comprehensive state-of-the-art review of the two-dimensional strip packing problem, a well-known NP-hard combinatorial optimization problem with significant applications in manufacturing and logistics. We survey the major methodological approaches including exact algorithms, constructive heuristics, and metaheuristic techniques that have been developed over the past decades. Additionally, we identify and describe the standard benchmark instances used by the research community for algorithm evaluation, including the classical datasets from Bengtsson, Berkey \& Wang, and Martello \& Vigo. This review provides researchers and practitioners with a consolidated overview of solution techniques and evaluation frameworks for the strip packing problem.
+This paper presents a comprehensive state-of-the-art review of the two-dimensional strip packing problem, a well-known NP-hard combinatorial optimization problem with significant applications in manufacturing and logistics. This document serves as a survey over the major methodological approaches including exact algorithms, constructive heuristics, and metaheuristic techniques that have been developed over the past decades. Additionally, we identify and describe the standard benchmark instances used by the research community for algorithm evaluation, including the classical datasets from Bengtsson, Berkey \& Wang, and Martello \& Vigo.
 \end{abstract}
 
 \section{Introduction}
@@ -34,7 +31,7 @@ The two-dimensional strip packing problem represents a fundamental challenge in 
 
 \subsection{Problem Definition}
 
-The Two-Dimensional Strip Packing Problem (2SP) is a well-studied combinatorial optimization problem with numerous real-world applications in manufacturing industries, particularly in waste minimization for wood, glass, and textile production, as well as in warehouse loading and scheduling problems \cite{lodi2002,augustine2006}. The problem was proven to be NP-hard by Baker et al. \cite{baker1980}, as it can be reduced to the one-dimensional bin packing problem.
+The Two-Dimensional Strip Packing Problem (2SP) is a combinatorial optimization problem with applications in manufacturing industries, particularly in waste minimization for wood, glass, and textile production, as well as in warehouse loading and scheduling problems \cite{lodi2002,augustine2006}. The problem was proven to be NP-hard by Baker et al. \cite{baker1980}, as it can be reduced to the one-dimensional bin packing problem.
 
 Formally, the input to the 2SP consists of a set $I = \{1, 2, \ldots, n\}$ of $n$ rectangles, each characterized by a specific width $w_i$ and height $h_i$, along with the fixed width $W$ of the strip. The objective is to place all rectangles into the strip with the given width $W$ and unlimited height, minimizing the total strip height $H$ required for the packing. The location of each rectangle $i$ in the strip is represented by the coordinates $(x_i, y_i)$ of its bottom-left corner. The problem can be formulated mathematically as follows:
 
@@ -100,6 +97,10 @@ To evaluate algorithm robustness and scalability, researchers use problem genera
 \subsubsection{Performance Evaluation}
 
 Algorithm performance is typically assessed using multiple metrics. The primary objective is minimizing the strip height $H$. Computation time is critical for practical applications, especially when algorithms must run in real-time production environments. For comparing against optimal solutions, researchers compute the gap to lower bounds as $(UB - LB) / LB \times 100\%$, where $UB$ is the upper bound (solution found) and $LB$ is a theoretical or computed lower bound. Success rates indicate the percentage of instances solved optimally or within a specified tolerance.
+
+\section{Conclusion}
+
+The two-dimensional strip packing problem continues to be an active area of research due to its theoretical complexity and practical relevance. This review has highlighted the diverse range of approaches developed over the years, from exact methods suitable for small instances to efficient heuristics and sophisticated metaheuristics for larger problems. The availability of standardized benchmark instances has facilitated meaningful comparison of algorithms and driven progress in the field. Recent developments in algorithm selection and machine learning-based approaches suggest promising directions for future research, particularly in developing adaptive systems that can automatically select the most appropriate solution method based on instance characteristics.
 
 \begin{thebibliography}{99}
 
@@ -170,9 +171,5 @@ D. Zhang, Y. Kang, A. Deng, ``A new heuristic recursive algorithm for the strip 
 D. Zhang, L. Shi, S. C. Leung, T. Wu, ``A priority heuristic for the guillotine rectangular packing problem,'' \textit{Information Processing Letters}, vol. 116, no. 1, pp. 15--21, 2016.
 
 \end{thebibliography}
-
-\section{Conclusion}
-
-The two-dimensional strip packing problem continues to be an active area of research due to its theoretical complexity and practical relevance. This review has highlighted the diverse range of approaches developed over the years, from exact methods suitable for small instances to efficient heuristics and sophisticated metaheuristics for larger problems. The availability of standardized benchmark instances has facilitated meaningful comparison of algorithms and driven progress in the field. Recent developments in algorithm selection and machine learning-based approaches suggest promising directions for future research, particularly in developing adaptive systems that can automatically select the most appropriate solution method based on instance characteristics.
 
 \end{document}
