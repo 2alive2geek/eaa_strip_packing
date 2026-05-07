@@ -11,6 +11,7 @@ where rectangles is a list of (width, height) tuples.
 """
 
 import random
+
 from dataclasses import dataclass
 
 # instance class which stores the name, strip width, and list of rectangles
@@ -150,13 +151,14 @@ def get_small_benchmarks(seed=42):
     all_instances = get_all_benchmarks(seed)
     return [inst for inst in all_instances if inst.n <= 20]
 
+generation_cfg_list = [
+    ("Bengtsson", generate_bengtsson),
+    ("Berkey & Wang", generate_berkey_wang),
+    ("Martello & Vigo", generate_martello_vigo),
+]
 
 if __name__ == "__main__":
-    for suite_name, gen_fn in [
-        ("Bengtsson", generate_bengtsson),
-        ("Berkey & Wang", generate_berkey_wang),
-        ("Martello & Vigo", generate_martello_vigo),
-    ]:
+    for suite_name, gen_fn in generation_cfg_list:
         instances = gen_fn()
         print(f"\n{'=' * 50}")
         print(f" {suite_name} Benchmark Suite ({len(instances)} instances)")
