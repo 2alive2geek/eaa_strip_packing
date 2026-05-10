@@ -29,7 +29,6 @@ from solver_heuristic import solve_blf
 from solver_exact import solve_exact
 
 LOG_PATH = "strip_packing_vis.log"
-_VIRTUAL_H = 9000
 _PAD = 32
 
 _COLORS = [
@@ -107,9 +106,10 @@ class VisualizerApp:
         self._area_lb = 1
         self._color_idx = 0
         self._current_height = 0
+        self._placements_list = []   # [(x, y, w, h, color, step)]
+        self._ghost_map = {}         # step -> (x, y, w, h)
 
         self._build_ui()
-        self.root.after(100, lambda: self._canvas.yview_moveto(1.0))
 
     # ── UI ────────────────────────────────────────────────────────────────
 
@@ -229,19 +229,12 @@ class VisualizerApp:
         canvas_frame = tk.Frame(main, bg="#1A1A2B")
         canvas_frame.pack(fill=tk.BOTH, expand=True, padx=(6, 0), pady=(6, 0))
 
-        self._canvas = tk.Canvas(
-            canvas_frame, bg="#1A1A2B",
-            scrollregion=(0, 0, 700, _VIRTUAL_H),
-            highlightthickness=0,
-        )
-        vsb = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL,
-                            command=self._canvas.yview)
-        self._canvas.configure(yscrollcommand=vsb.set)
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._canvas = tk.Canvas(canvas_frame, bg="#1A1A2B", highlightthickness=0)
         self._canvas.pack(fill=tk.BOTH, expand=True)
+        self._canvas.bind("<Configure>", lambda e: self._on_canvas_resize())
 
         self._canvas.create_text(
-            350, _VIRTUAL_H - 300,
+            350, 200,
             text="Press  ▶ Heuristic  or  ▶ Exact (CP-SAT)  to start",
             fill="#2A2A44", font=("Helvetica", 13), tags="hint",
         )
@@ -272,6 +265,8 @@ class VisualizerApp:
         self._current_height = 0
         self._strip_W = inst.strip_width
         self._area_lb = inst.area_lower_bound
+        self._placements_list = []
+        self._ghost_map = {}
 
         for sv in (self._stat_n, self._stat_W, self._stat_lb,
                    self._stat_h, self._stat_gap, self._stat_time, self._stat_sort):
@@ -285,7 +280,6 @@ class VisualizerApp:
 
         self._canvas.delete("all")
         self._draw_border(0)
-        self._canvas.yview_moveto(1.0)
         self._log_clear()
 
         for btn in self._solver_btns:
@@ -386,34 +380,40 @@ class VisualizerApp:
 
         elif etype == "search":
             x, y, w, h = evt["x"], evt["y"], evt["w"], evt["h"]
-            self._draw_rect(x, y, w, h, "#662222", evt["step"],
-                            ghost=True, tag=f"ghost_{evt['step']}")
+            self._ghost_map[evt["step"]] = (x, y, w, h)
+            self._redraw_canvas()
             self._log_line(
                 f"  step {evt['step']:>3d}:  try  ({x:>4d},{y:>4d})  "
                 f"{w}×{h}  → overlap, skip"
             )
 
         elif etype == "place":
-            self._canvas.delete(f"ghost_{evt['step']}")
+            self._ghost_map.pop(evt["step"], None)
             x, y, w, h = evt["x"], evt["y"], evt["w"], evt["h"]
             color = _COLORS[self._color_idx % len(_COLORS)]
             self._color_idx += 1
             self._current_height = evt.get("current_height", y + h)
-            self._draw_rect(x, y, w, h, color, evt["step"])
+            self._placements_list.append((x, y, w, h, color, evt["step"]))
+            self._redraw_canvas()
             gap = (self._current_height - self._area_lb) / self._area_lb * 100
             self._stat_h.set(str(self._current_height))
             self._stat_gap.set(f"{gap:.1f}%")
-            self._draw_border(self._current_height)
-            self._scroll_to_top()
             self._log_line(
                 f"  step {evt['step']:>3d}:  place ({x:>4d},{y:>4d})  "
                 f"{w}×{h}  H → {self._current_height}"
             )
 
         elif etype == "done":
-            # Instant mode: draw everything now from the placements in the event
+            # Instant mode: build placements list and redraw with correct scale
             if self._current_mode == "instant" and evt.get("placements"):
-                self._draw_all(evt["placements"])
+                self._placements_list = []
+                for i, p in enumerate(evt["placements"]):
+                    self._placements_list.append(
+                        (p[0], p[1], p[2], p[3], _COLORS[i % len(_COLORS)], i + 1)
+                    )
+                if evt["placements"]:
+                    self._current_height = max(p[1] + p[3] for p in evt["placements"])
+                self._redraw_canvas()
 
             h = evt.get("height") or self._current_height
             t = evt.get("wall_time", 0.0)
@@ -448,7 +448,8 @@ class VisualizerApp:
 
     def _canvas_y(self, strip_y: float) -> float:
         """Strip y=0 is bottom; canvas y=0 is top."""
-        return _VIRTUAL_H - _PAD - strip_y * self._scale
+        ch = max(self._canvas.winfo_height(), 100)
+        return ch - _PAD - strip_y * self._scale
 
     def _draw_rect(self, x, y, w, h, fill, step, ghost=False, tag=None):
         s = self._scale
@@ -472,17 +473,27 @@ class VisualizerApp:
                     font=("Helvetica", fs, "bold"), tags=tags,
                 )
 
-    def _draw_all(self, placements):
-        """Draw all placements at once (instant mode)."""
+    def _redraw_canvas(self):
+        """Recompute scale to fit the whole strip, then redraw everything."""
+        cw = max(self._canvas.winfo_width(), 200)
+        ch = max(self._canvas.winfo_height(), 200)
+        cur_h = max(self._current_height, 1)
+        self._scale = min(
+            (cw - 2 * _PAD) / self._strip_W,
+            (ch - 2 * _PAD) / cur_h,
+        )
         self._canvas.delete("all")
-        self._draw_border(0)
-        for i, p in enumerate(placements):
-            x, y, w, h = p[0], p[1], p[2], p[3]
-            self._draw_rect(x, y, w, h, _COLORS[i % len(_COLORS)], i + 1)
-        if placements:
-            self._current_height = max(p[1] + p[3] for p in placements)
+        for (x, y, w, h, color, step) in self._placements_list:
+            self._draw_rect(x, y, w, h, color, step)
+        for step, (x, y, w, h) in self._ghost_map.items():
+            self._draw_rect(x, y, w, h, "#662222", step,
+                            ghost=True, tag=f"ghost_{step}")
         self._draw_border(self._current_height)
-        self._scroll_to_top()
+
+    def _on_canvas_resize(self):
+        """Keep the whole strip in view when the window is resized."""
+        if self._placements_list or self._ghost_map:
+            self._redraw_canvas()
 
     def _draw_border(self, height):
         self._canvas.delete("border")
@@ -505,11 +516,6 @@ class VisualizerApp:
                 text=f"H={height}", fill="#6666AA",
                 font=("Helvetica", 8), anchor="e", tags="border",
             )
-
-    def _scroll_to_top(self):
-        top_y = self._canvas_y(self._current_height)
-        frac = max(0.0, (top_y - 50) / _VIRTUAL_H)
-        self._canvas.yview_moveto(frac)
 
     # ── Decision log ──────────────────────────────────────────────────────
 
