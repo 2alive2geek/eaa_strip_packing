@@ -27,7 +27,7 @@ def solve_exact(instance: Instance, time_limit_seconds: float = 60.0, log_path=N
     Args:
         instance: the benchmark instance to solve.
         time_limit_seconds: maximum solver time.
-        log_path: if provided, write JSONL start/done events so a visualizer
+        log_path: if provided, write JSONL start/done events so the visualizer
             can show the result immediately after solving.
 
     Returns:
@@ -139,7 +139,7 @@ def solve_exact(instance: Instance, time_limit_seconds: float = 60.0, log_path=N
 
 
 if __name__ == "__main__":
-    # Quick demo with a small instance
+    # quick demo with a small instance when script called directly
     demo = Instance(
         name="demo_exact",
         strip_width=10,

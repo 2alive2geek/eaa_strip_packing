@@ -5,7 +5,7 @@ Based on the constructive heuristic family introduced by Baker et al. (1980)
 and extended by Chazelle (1983).
 
 Algorithm:
-  1. Sort rectangles by a chosen criterion (e.g., decreasing height).
+  1. Sort rectangles by a chosen criterion (e.g., decreasing height, width, area, perimeter).
   2. For each rectangle, find the lowest position (y) where it can be placed
      without overlapping any already-placed rectangle, then push it as far
      left (x) as possible within that row.
@@ -20,9 +20,8 @@ effect on solution quality:
 
 Design choices:
   - Placed rectangles are stored in a list; for each candidate position we
-    scan existing placements to check feasibility. This is O(n^2) per item,
-    O(n^3) total, which is acceptable for the benchmark sizes (n <= 200).
-  - We discretize candidate y-positions to the set {0} ∪ {y_j + h_j} for
+    scan existing placements to check feasibility.
+  - Candidate y-positions are restricted to the set {0, y_j + h_j} for
     already-placed rectangles, because an optimal BLF placement always has
     each rectangle touching either the bottom of the strip or the top edge
     of another rectangle.
@@ -121,7 +120,7 @@ def solve_blf(instance: Instance, sort_key="height", log_path=None):
             'area'      - decreasing area   (DA)
             'perimeter' - decreasing perim. (DP)
         log_path: if provided, write JSONL placement events to this file
-            in real-time so a visualizer can tail it while solving.
+            in real-time so the visualizer can tail it while solving.
 
     Returns:
         dict with keys:
@@ -136,7 +135,7 @@ def solve_blf(instance: Instance, sort_key="height", log_path=None):
     W = instance.strip_width
     rects = list(instance.rectangles)
 
-    # Sort rectangles
+    # sort rectangles
     key_fns = {
         "height": lambda r: (-r[1], -r[0]),
         "width": lambda r: (-r[0], -r[1]),
@@ -145,7 +144,7 @@ def solve_blf(instance: Instance, sort_key="height", log_path=None):
     }
     rects.sort(key=key_fns[sort_key])
 
-    # Open log file with line-buffering so each event is flushed immediately
+    # open log file with line-buffering so each event is flushed immediately
     _log = None
     if log_path is not None:
         _log = open(log_path, "w", buffering=1)

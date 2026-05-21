@@ -24,9 +24,19 @@ import tkinter as tk
 from collections import deque
 from tkinter import ttk
 
+try:
+    import matplotlib
+    matplotlib.use("TkAgg")
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    _HAS_MATPLOTLIB = True
+except ImportError:
+    _HAS_MATPLOTLIB = False
+
 from benchmarks import get_all_benchmarks
 from solver_heuristic import solve_blf
 from solver_exact import solve_exact
+from solver_shelf import solve_nfdh, solve_ffdh
 
 LOG_PATH = "strip_packing_vis.log"
 _PAD = 32
@@ -59,6 +69,55 @@ def _run_exact(instance, sort_key, log_path):
     solve_exact(instance, time_limit_seconds=60.0, log_path=log_path)
 
 
+def _run_nfdh(instance, sort_key, log_path):
+    """Run Next Fit Decreasing Height shelf algorithm."""
+    solve_nfdh(instance, log_path=log_path)
+
+
+def _run_ffdh(instance, sort_key, log_path):
+    """Run First Fit Decreasing Height shelf algorithm."""
+    solve_ffdh(instance, log_path=log_path)
+
+
+def _run_ml_advisor(instance, sort_key, log_path):
+    """
+    Use the trained ML model to predict the best heuristic, then run it
+    with full step-by-step logging so the visualizer animates the placement.
+    Falls back to best-of-BLF if the model file is not found.
+    """
+    chosen_id = "blf_height"   # safe default
+
+    try:
+        import joblib
+        import numpy as np
+        from instance_features import extract_features
+        bundle  = joblib.load("best_solver_model.pkl")
+        feats   = np.array(extract_features(instance), dtype=float).reshape(1, -1)
+        idx     = bundle["model"].predict(feats)[0]
+        chosen_id = bundle["solver_names"][idx]
+    except FileNotFoundError:
+        # No model yet – pick best BLF sort strategy silently
+        best_h = float("inf")
+        for sk in ("height", "width", "area", "perimeter"):
+            r = solve_blf(instance, sort_key=sk)
+            if r["height"] < best_h:
+                best_h, chosen_id = r["height"], f"blf_{sk}"
+    except Exception:
+        pass   # use default
+
+    # Dispatch to the chosen solver WITH log_path so events are emitted
+    # and the visualizer can animate them step by step.
+    if chosen_id == "nfdh":
+        solve_nfdh(instance, log_path=log_path)
+    elif chosen_id == "ffdh":
+        solve_ffdh(instance, log_path=log_path)
+    elif chosen_id.startswith("blf_"):
+        sk = chosen_id[4:]   # strip "blf_" prefix  → "height", "width", …
+        solve_blf(instance, sort_key=sk, log_path=log_path)
+    else:
+        solve_blf(instance, sort_key="height", log_path=log_path)
+
+
 # ── Solver Registry ───────────────────────────────────────────────────────────
 # To add a new solver: append a dict with these keys:
 #   id     – unique string
@@ -70,10 +129,24 @@ def _run_exact(instance, sort_key, log_path):
 SOLVER_REGISTRY = [
     {
         "id":    "heuristic",
-        "label": "▶  Heuristic",
+        "label": "▶  BLF",
         "bg":    "#3A8E4E",
         "mode":  "animated",
         "run":   _run_heuristic,
+    },
+    {
+        "id":    "nfdh",
+        "label": "▶  NFDH",
+        "bg":    "#7D3C98",
+        "mode":  "animated",
+        "run":   _run_nfdh,
+    },
+    {
+        "id":    "ffdh",
+        "label": "▶  FFDH",
+        "bg":    "#1A5276",
+        "mode":  "animated",
+        "run":   _run_ffdh,
     },
     {
         "id":    "exact",
@@ -81,6 +154,13 @@ SOLVER_REGISTRY = [
         "bg":    "#2471A3",
         "mode":  "instant",
         "run":   _run_exact,
+    },
+    {
+        "id":    "ml",
+        "label": "▶  ML Select",
+        "bg":    "#6E2F8E",
+        "mode":  "animated",
+        "run":   _run_ml_advisor,
     },
 ]
 
@@ -108,6 +188,19 @@ class VisualizerApp:
         self._current_height = 0
         self._placements_list = []   # [(x, y, w, h, color, step)]
         self._ghost_map = {}         # step -> (x, y, w, h)
+
+        # Zoom / pan state
+        self._zoom = 1.0          # multiplier relative to fit-to-window
+        self._pan_x = 0.0         # horizontal pan offset in canvas pixels
+        self._pan_y = 0.0         # vertical pan offset in canvas pixels
+        self._fit_scale = 1.0     # scale that fits the whole strip (no zoom)
+        self._drag_start = None   # (canvas_x, canvas_y, pan_x0, pan_y0)
+
+        # Comparison panel state (shown when ML Select is active)
+        self._comparison_visible = False
+        self._comparison_mpl_canvas = None
+        self._ml_chosen_sk = None
+        self._last_comparison_data = None  # (heights_dict, times_dict)
 
         self._build_ui()
 
@@ -225,13 +318,44 @@ class VisualizerApp:
         log_sb.pack(side=tk.RIGHT, fill=tk.Y)
         self._log_text.pack(fill=tk.BOTH, expand=True, padx=4)
 
-        # ── Canvas ───────────────────────────────────────────────────────
-        canvas_frame = tk.Frame(main, bg="#1A1A2B")
-        canvas_frame.pack(fill=tk.BOTH, expand=True, padx=(6, 0), pady=(6, 0))
+        # ── Content area (canvas + comparison panel side by side) ─────────
+        content_frame = tk.Frame(main, bg="#1A1A2B")
+        content_frame.pack(fill=tk.BOTH, expand=True)
 
-        self._canvas = tk.Canvas(canvas_frame, bg="#1A1A2B", highlightthickness=0)
+        # ── Comparison panel (right, shown only when ML Select is active) ─
+        self._comparison_panel = tk.Frame(content_frame, bg="#12121F", width=380)
+        self._comparison_panel.pack_propagate(False)
+        tk.Label(
+            self._comparison_panel,
+            text="ALL SOLVERS COMPARISON",
+            bg="#12121F", fg="#334455",
+            font=("Helvetica", 7, "bold"),
+        ).pack(anchor="w", padx=6, pady=(6, 0))
+        self._comparison_loading_label = tk.Label(
+            self._comparison_panel,
+            text="Running all solvers…",
+            bg="#12121F", fg="#888899", font=("Helvetica", 9),
+        )
+        self._comparison_loading_label.pack(pady=20)
+
+        # ── Canvas ───────────────────────────────────────────────────────
+        self._canvas_frame = tk.Frame(content_frame, bg="#1A1A2B")
+        self._canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True,
+                                padx=(6, 0), pady=(6, 0))
+
+        self._canvas = tk.Canvas(self._canvas_frame, bg="#1A1A2B", highlightthickness=0)
         self._canvas.pack(fill=tk.BOTH, expand=True)
         self._canvas.bind("<Configure>", lambda e: self._on_canvas_resize())
+        # Zoom with mouse wheel
+        self._canvas.bind("<MouseWheel>",  self._on_mousewheel)   # Windows
+        self._canvas.bind("<Button-4>",    self._on_mousewheel)   # Linux scroll up
+        self._canvas.bind("<Button-5>",    self._on_mousewheel)   # Linux scroll down
+        # Pan by click-drag
+        self._canvas.bind("<ButtonPress-1>",   self._on_drag_start)
+        self._canvas.bind("<B1-Motion>",        self._on_drag)
+        self._canvas.bind("<ButtonRelease-1>",  self._on_drag_end)
+        # Double-click resets zoom/pan
+        self._canvas.bind("<Double-Button-1>",  self._on_zoom_reset)
 
         self._canvas.create_text(
             350, 200,
@@ -276,7 +400,11 @@ class VisualizerApp:
         self._stat_lb.set(str(inst.area_lower_bound))
 
         cw = self._canvas.winfo_width() or 700
-        self._scale = (cw - 2 * _PAD) / inst.strip_width
+        self._fit_scale = (cw - 2 * _PAD) / inst.strip_width
+        self._scale = self._fit_scale
+        self._zoom = 1.0
+        self._pan_x = 0.0
+        self._pan_y = 0.0
 
         self._canvas.delete("all")
         self._draw_border(0)
@@ -289,6 +417,19 @@ class VisualizerApp:
         self._status.set(f"Running {lbl} on {inst.name} …")
 
         open(LOG_PATH, "w").close()
+
+        # Show comparison panel only for ML Select; hide for all other solvers
+        if solver_cfg["id"] == "ml":
+            self._ml_chosen_sk = None
+            self._last_comparison_data = None
+            self._show_comparison_panel()
+            threading.Thread(
+                target=self._run_all_solvers_thread,
+                args=(inst,),
+                daemon=True,
+            ).start()
+        else:
+            self._hide_comparison_panel()
 
         self._solver_thread = threading.Thread(
             target=self._run_solver_thread,
@@ -424,6 +565,12 @@ class VisualizerApp:
             self._stat_time.set(f"{t:.4f}s")
             self._stat_sort.set(sk)
             self._draw_border(h)
+            # If ML panel is visible, store chosen solver key and refresh chart
+            if self._comparison_visible:
+                self._ml_chosen_sk = sk
+                if self._last_comparison_data is not None:
+                    heights_d, times_d = self._last_comparison_data
+                    self._draw_comparison_chart(heights_d, times_d)
             self._log_line(
                 f"DONE   height={h}  gap={gap:.1f}%  "
                 f"sort/status={sk}  time={t:.4f}s"
@@ -435,6 +582,11 @@ class VisualizerApp:
             for btn in self._solver_btns:
                 btn.config(state=tk.NORMAL)
             self._stop_btn.config(state=tk.DISABLED)
+
+        elif etype == "info":
+            msg = evt.get("msg", "")
+            self._log_line(f"\u2139  {msg}")
+            self._status.set(msg)
 
         elif etype == "error":
             self._log_line(f"ERROR: {evt.get('msg', '?')}")
@@ -449,11 +601,11 @@ class VisualizerApp:
     def _canvas_y(self, strip_y: float) -> float:
         """Strip y=0 is bottom; canvas y=0 is top."""
         ch = max(self._canvas.winfo_height(), 100)
-        return ch - _PAD - strip_y * self._scale
+        return ch - _PAD - strip_y * self._scale + self._pan_y
 
     def _draw_rect(self, x, y, w, h, fill, step, ghost=False, tag=None):
         s = self._scale
-        cx0 = _PAD + x * s
+        cx0 = _PAD + x * s + self._pan_x
         cx1 = cx0 + w * s
         cy0 = self._canvas_y(y + h)
         cy1 = self._canvas_y(y)
@@ -474,14 +626,15 @@ class VisualizerApp:
                 )
 
     def _redraw_canvas(self):
-        """Recompute scale to fit the whole strip, then redraw everything."""
+        """Recompute fit scale, apply zoom, then redraw everything."""
         cw = max(self._canvas.winfo_width(), 200)
         ch = max(self._canvas.winfo_height(), 200)
         cur_h = max(self._current_height, 1)
-        self._scale = min(
+        self._fit_scale = min(
             (cw - 2 * _PAD) / self._strip_W,
             (ch - 2 * _PAD) / cur_h,
         )
+        self._scale = self._fit_scale * self._zoom
         self._canvas.delete("all")
         for (x, y, w, h, color, step) in self._placements_list:
             self._draw_rect(x, y, w, h, color, step)
@@ -489,6 +642,21 @@ class VisualizerApp:
             self._draw_rect(x, y, w, h, "#662222", step,
                             ghost=True, tag=f"ghost_{step}")
         self._draw_border(self._current_height)
+        # Zoom indicator overlay
+        if self._zoom != 1.0:
+            self._canvas.create_text(
+                cw - 6, 6,
+                text=f"zoom {self._zoom:.1f}×  (scroll=zoom  drag=pan  dbl-click=reset)",
+                anchor="ne", fill="#7777AA",
+                font=("Helvetica", 7), tags="zoomlabel",
+            )
+        else:
+            self._canvas.create_text(
+                cw - 6, 6,
+                text="scroll to zoom · drag to pan · dbl-click to reset",
+                anchor="ne", fill="#44445A",
+                font=("Helvetica", 7), tags="zoomlabel",
+            )
 
     def _on_canvas_resize(self):
         """Keep the whole strip in view when the window is resized."""
@@ -498,7 +666,8 @@ class VisualizerApp:
     def _draw_border(self, height):
         self._canvas.delete("border")
         s = self._scale
-        x0, x1 = _PAD, _PAD + self._strip_W * s
+        x0 = _PAD + self._pan_x
+        x1 = _PAD + self._strip_W * s + self._pan_x
         y_bot = self._canvas_y(0)
         y_top = self._canvas_y(max(height, 1))
         self._canvas.create_rectangle(
@@ -529,6 +698,194 @@ class VisualizerApp:
         self._log_text.config(state=tk.NORMAL)
         self._log_text.delete("1.0", tk.END)
         self._log_text.config(state=tk.DISABLED)
+
+    # ── Zoom / pan handlers ─────────────────────────────────────────────────
+
+    def _on_mousewheel(self, event):
+        """Zoom in/out centred on the cursor position."""
+        if not self._placements_list:
+            return
+        # Determine scroll direction (Windows: event.delta; Linux: event.num)
+        if event.num == 5 or (hasattr(event, 'delta') and event.delta < 0):
+            factor = 1 / 1.15
+        else:
+            factor = 1.15
+        new_zoom = max(0.5, min(self._zoom * factor, 30.0))
+        actual = new_zoom / self._zoom
+        mx, my = event.x, event.y
+        ch = max(self._canvas.winfo_height(), 100)
+        # Adjust pan so the strip point under the cursor stays fixed
+        self._pan_x = mx - _PAD - (mx - _PAD - self._pan_x) * actual
+        self._pan_y = (my - ch + _PAD) + (ch - _PAD + self._pan_y - my) * actual
+        self._zoom = new_zoom
+        self._redraw_canvas()
+
+    def _on_drag_start(self, event):
+        if not self._placements_list:
+            return
+        self._drag_start = (event.x, event.y, self._pan_x, self._pan_y)
+        self._canvas.config(cursor="fleur")
+
+    def _on_drag(self, event):
+        if self._drag_start is None:
+            return
+        sx, sy, px0, py0 = self._drag_start
+        self._pan_x = px0 + (event.x - sx)
+        self._pan_y = py0 + (event.y - sy)
+        self._redraw_canvas()
+
+    def _on_drag_end(self, event):
+        self._drag_start = None
+        self._canvas.config(cursor="")
+
+    def _on_zoom_reset(self, event):
+        """Double-click: reset zoom and pan to fit-to-window."""
+        self._zoom = 1.0
+        self._pan_x = 0.0
+        self._pan_y = 0.0
+        self._redraw_canvas()
+
+    # ── Comparison panel ──────────────────────────────────────────────────
+
+    def _show_comparison_panel(self):
+        if not self._comparison_visible:
+            # Pack comparison panel to RIGHT before canvas so it claims right edge
+            self._canvas_frame.pack_forget()
+            self._comparison_panel.pack(side=tk.RIGHT, fill=tk.Y,
+                                        padx=(0, 4), pady=(6, 0))
+            self._canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True,
+                                    padx=(6, 0), pady=(6, 0))
+            self._comparison_visible = True
+        # Reset to loading state for each new run
+        if self._comparison_mpl_canvas is not None:
+            self._comparison_mpl_canvas.get_tk_widget().destroy()
+            self._comparison_mpl_canvas = None
+        self._comparison_loading_label.pack(pady=20)
+
+    def _hide_comparison_panel(self):
+        if self._comparison_visible:
+            self._comparison_panel.pack_forget()
+            self._comparison_visible = False
+
+    def _run_all_solvers_thread(self, inst):
+        """Run all 6 heuristic solvers silently and collect heights + times."""
+        candidates = [
+            ("blf_height",    lambda i: solve_blf(i, sort_key="height")),
+            ("blf_width",     lambda i: solve_blf(i, sort_key="width")),
+            ("blf_area",      lambda i: solve_blf(i, sort_key="area")),
+            ("blf_perimeter", lambda i: solve_blf(i, sort_key="perimeter")),
+            ("nfdh",          solve_nfdh),
+            ("ffdh",          solve_ffdh),
+        ]
+        heights, times = {}, {}
+        for name, solver in candidates:
+            try:
+                result = solver(inst)
+                heights[name] = result["height"]
+                times[name] = result["wall_time"]
+            except Exception:
+                heights[name] = 0
+                times[name] = 0.0
+        self.root.after(0, self._update_comparison_chart, heights, times)
+
+    def _update_comparison_chart(self, heights, times):
+        """Store comparison results and render the chart."""
+        self._last_comparison_data = (heights, times)
+        self._draw_comparison_chart(heights, times)
+
+    def _draw_comparison_chart(self, heights, times):
+        """Render two bar charts (height + time) in the right comparison panel."""
+        if not self._comparison_visible:
+            return
+
+        if not _HAS_MATPLOTLIB:
+            self._comparison_loading_label.config(
+                text="Install matplotlib\nto see the comparison chart.",
+                fg="#FF8866",
+            )
+            return
+
+        _SK_TO_ID = {
+            "height": "blf_height", "width": "blf_width",
+            "area": "blf_area",     "perimeter": "blf_perimeter",
+            "nfdh": "nfdh",         "ffdh": "ffdh",
+        }
+        chosen_name = _SK_TO_ID.get(self._ml_chosen_sk) if self._ml_chosen_sk else None
+
+        names  = list(heights.keys())
+        h_vals = [heights[n] for n in names]
+        t_vals = [times[n] * 1000 for n in names]   # → milliseconds
+
+        short_labels = {
+            "blf_height": "BLF\nHeight", "blf_width": "BLF\nWidth",
+            "blf_area":   "BLF\nArea",   "blf_perimeter": "BLF\nPerim.",
+            "nfdh": "NFDH",              "ffdh": "FFDH",
+        }
+        labels     = [short_labels.get(n, n) for n in names]
+        bar_colors = ["#F28E2B" if n == chosen_name else "#4E79A7" for n in names]
+
+        # Tear down previous figure
+        if self._comparison_mpl_canvas is not None:
+            self._comparison_mpl_canvas.get_tk_widget().destroy()
+            self._comparison_mpl_canvas = None
+        self._comparison_loading_label.pack_forget()
+
+        fig = Figure(figsize=(3.8, 5.5), dpi=90, facecolor="#12121F")
+        fig.subplots_adjust(left=0.18, right=0.95, top=0.91,
+                            bottom=0.12, hspace=0.55)
+        ax1 = fig.add_subplot(211)
+        ax2 = fig.add_subplot(212)
+
+        # ── Height chart ──────────────────────────────────────────────────
+        bars1 = ax1.bar(range(len(names)), h_vals, color=bar_colors,
+                        edgecolor="#2A2A3A", linewidth=0.6)
+        ax1.axhline(self._area_lb, color="#E15759", linestyle="--",
+                    linewidth=1.0, label=f"LB={self._area_lb}")
+        ax1.set_title("Packing Height", color="#CCCCDD", fontsize=8, pad=3)
+        ax1.set_xticks(range(len(names)))
+        ax1.set_xticklabels(labels, fontsize=6.5, color="#AAAACC")
+        ax1.set_ylabel("Height", color="#AAAACC", fontsize=7)
+        ax1.tick_params(axis="both", colors="#AAAACC", labelsize=6.5)
+        ax1.set_facecolor("#1A1A2B")
+        for sp in ax1.spines.values():
+            sp.set_color("#334455")
+        ax1.legend(fontsize=6, labelcolor="#CCCCDD",
+                   facecolor="#12121F", edgecolor="#334455", loc="upper right")
+        max_h = max(h_vals) if h_vals else 1
+        for bar, val in zip(bars1, h_vals):
+            ax1.text(bar.get_x() + bar.get_width() / 2,
+                     bar.get_height() + max_h * 0.015,
+                     str(val), ha="center", va="bottom",
+                     fontsize=6, color="#DDDDEE")
+
+        # ── Time chart ────────────────────────────────────────────────────
+        bars2 = ax2.bar(range(len(names)), t_vals, color=bar_colors,
+                        edgecolor="#2A2A3A", linewidth=0.6)
+        ax2.set_title("Solve Time (ms)", color="#CCCCDD", fontsize=8, pad=3)
+        ax2.set_xticks(range(len(names)))
+        ax2.set_xticklabels(labels, fontsize=6.5, color="#AAAACC")
+        ax2.set_ylabel("Time (ms)", color="#AAAACC", fontsize=7)
+        ax2.tick_params(axis="both", colors="#AAAACC", labelsize=6.5)
+        ax2.set_facecolor("#1A1A2B")
+        for sp in ax2.spines.values():
+            sp.set_color("#334455")
+        max_t = max(t_vals) if t_vals else 1
+        for bar, val in zip(bars2, t_vals):
+            ax2.text(bar.get_x() + bar.get_width() / 2,
+                     bar.get_height() + max_t * 0.015,
+                     f"{val:.1f}", ha="center", va="bottom",
+                     fontsize=6, color="#DDDDEE")
+
+        # ── Supra-title ───────────────────────────────────────────────────
+        title_text  = f"ML chose: {chosen_name}" if chosen_name else "All Solvers Comparison"
+        title_color = "#F28E2B" if chosen_name else "#CCCCDD"
+        fig.text(0.5, 0.965, title_text, ha="center", va="top",
+                 fontsize=7.5, color=title_color, fontweight="bold")
+
+        mpl_canvas = FigureCanvasTkAgg(fig, master=self._comparison_panel)
+        mpl_canvas.draw()
+        mpl_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=2, pady=(0, 4))
+        self._comparison_mpl_canvas = mpl_canvas
 
 
 def main():
