@@ -54,7 +54,7 @@ def _write_place(f, step: int, x, y, w, h, cur_h, t0: float):
     }) + "\n")
 
 
-# ── NFDH ─────────────────────────────────────────────────────────────────────
+# -- NFDH ---------------------------------------------------------------------
 
 def solve_nfdh(instance: Instance, log_path=None) -> dict:
     """
@@ -114,7 +114,7 @@ def solve_nfdh(instance: Instance, log_path=None) -> dict:
     }
 
 
-# ── FFDH ─────────────────────────────────────────────────────────────────────
+# -- FFDH ---------------------------------------------------------------------
 
 def solve_ffdh(instance: Instance, log_path=None) -> dict:
     """

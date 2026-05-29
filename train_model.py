@@ -64,7 +64,7 @@ from solver_heuristic import solve_blf
 from solver_shelf import solve_nfdh, solve_ffdh
 from solver_skyline import solve_skyline
 
-# ── Candidate solvers ─────────────────────────────────────────────────────────
+# -- Candidate solvers ---------------------------------------------------------
 # Each entry: (solver_id, callable(instance) → dict with "height" key).
 # Indices 0-9 are the class labels for both the RF and MLP classifiers.
 
@@ -87,7 +87,7 @@ RF_MODEL_PATH  = "best_solver_model.pkl"
 MLP_MODEL_PATH = "best_solver_model_nn.pkl"
 
 
-# ── PyTorch MLP architecture ──────────────────────────────────────────────────
+# -- PyTorch MLP architecture --------------------------------------------------
 
 class StripPackingMLP(nn.Module):
     """
@@ -115,7 +115,7 @@ class StripPackingMLP(nn.Module):
         return self.net(x)
 
 
-# ── Data collection ───────────────────────────────────────────────────────────
+# -- Data collection -----------------------------------------------------------
 
 def collect_data(instances):
     """
@@ -136,7 +136,7 @@ def collect_data(instances):
     print(f"Running {n_solvers} solvers × {n_inst} instances …\n")
     header = "  ".join(f"{name:>13}" for name in SOLVER_NAMES)
     print(f"{'Instance':>{w_name}}  {header}  → best")
-    print("─" * (w_name + n_solvers * 15 + 10))
+    print("-" * (w_name + n_solvers * 15 + 10))
 
     for inst in instances:
         heights = [fn(inst)["height"] for _, fn in SOLVER_CANDIDATES]
@@ -152,7 +152,7 @@ def collect_data(instances):
     return np.array(X, dtype=float), np.array(y, dtype=int), all_heights
 
 
-# ── Random Forest training ────────────────────────────────────────────────────
+# -- Random Forest training ----------------------------------------------------
 
 def train_rf(X, y):
     """Train RandomForestClassifier with 3-fold CV; return fitted model."""
@@ -170,7 +170,7 @@ def train_rf(X, y):
     return clf
 
 
-# ── MLP training ──────────────────────────────────────────────────────────────
+# -- MLP training --------------------------------------------------------------
 
 def train_mlp(X: np.ndarray, y: np.ndarray, epochs: int = 300):
     """
@@ -193,7 +193,7 @@ def train_mlp(X: np.ndarray, y: np.ndarray, epochs: int = 300):
     n_classes = len(SOLVER_CANDIDATES)
     device    = torch.device("cpu")
 
-    # ── 5-fold CV ─────────────────────────────────────────────────────────────
+    # -- 5-fold CV -------------------------------------------------------------
     # Use 3-fold CV because the rarest class (ffdh) has only 3 training
     # examples; StratifiedKFold requires at least n_splits members per class.
     cv  = StratifiedKFold(n_splits=3, shuffle=True, random_state=0)
@@ -227,7 +227,7 @@ def train_mlp(X: np.ndarray, y: np.ndarray, epochs: int = 300):
 
     print(f"\n[MLP] 5-fold CV accuracy: {np.mean(fold_accs):.3f} ± {np.std(fold_accs):.3f}")
 
-    # ── Final model on full dataset ───────────────────────────────────────────
+    # -- Final model on full dataset -------------------------------------------
     scaler = StandardScaler().fit(X)
     X_all  = torch.tensor(scaler.transform(X), dtype=torch.float32)
     y_all  = torch.tensor(y,                   dtype=torch.long)
@@ -262,7 +262,7 @@ def _mlp_predict(mlp, scaler, features_2d: np.ndarray) -> int:
         return int(mlp(x).argmax(dim=1).item())
 
 
-# ── Test-set evaluation ───────────────────────────────────────────────────────
+# -- Test-set evaluation -------------------------------------------------------
 
 def evaluate_on_test_set(rf_clf, mlp, scaler, n_test: int = 100):
     """
@@ -338,16 +338,16 @@ def evaluate_on_test_set(rf_clf, mlp, scaler, n_test: int = 100):
             "mlp_correct":   int(mlp_idx == oracle_idx) if mlp is not None else "",
         })
 
-    # ── Summary ───────────────────────────────────────────────────────────────
+    # -- Summary ---------------------------------------------------------------
     n = len(test_instances)
-    print("\n" + "─" * 50)
+    print("\n" + "-" * 50)
     print(f"  RF  accuracy: {rf_correct}/{n} = {rf_correct/n:.1%}   "
           f"mean regret: {rf_regret_sum/n:.2f} %")
     if mlp is not None:
         print(f"  MLP accuracy: {mlp_correct}/{n} = {mlp_correct/n:.1%}   "
               f"mean regret: {mlp_regret_sum/n:.2f} %")
 
-    # ── Save CSV ──────────────────────────────────────────────────────────────
+    # -- Save CSV --------------------------------------------------------------
     csv_path = "test_results.csv"
     fieldnames = list(rows[0].keys())
     with open(csv_path, "w", newline="") as f:
@@ -364,7 +364,7 @@ def evaluate_on_test_set(rf_clf, mlp, scaler, n_test: int = 100):
     }
 
 
-# ── Summaries ─────────────────────────────────────────────────────────────────
+# -- Summaries -----------------------------------------------------------------
 
 def print_summary(y, clf):
     print("\nBest-solver distribution across training instances:")
@@ -379,14 +379,14 @@ def print_summary(y, clf):
         print(f"  {name:30s}  {imp:.4f}  {bar}")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main ----------------------------------------------------------------------
 
 def main():
-    # ── 1. Collect training data ──────────────────────────────────────────────
+    # -- 1. Collect training data ----------------------------------------------
     instances = get_all_benchmarks()
     X, y, _ = collect_data(instances)
 
-    # ── 2. Train Random Forest ────────────────────────────────────────────────
+    # -- 2. Train Random Forest ------------------------------------------------
     print("\n" + "═" * 70)
     print("Training Random Forest …")
     print("═" * 70)
@@ -401,7 +401,7 @@ def main():
     joblib.dump(rf_bundle, RF_MODEL_PATH)
     print(f"\nSaved → {RF_MODEL_PATH}")
 
-    # ── 3. Train PyTorch MLP ──────────────────────────────────────────────────
+    # -- 3. Train PyTorch MLP --------------------------------------------------
     print("\n" + "═" * 70)
     print("Training PyTorch MLP …")
     print("═" * 70)
@@ -420,7 +420,7 @@ def main():
         joblib.dump(nn_bundle, MLP_MODEL_PATH)
         print(f"Saved → {MLP_MODEL_PATH}")
 
-    # ── 4. Evaluate on held-out test set ──────────────────────────────────────
+    # -- 4. Evaluate on held-out test set --------------------------------------
     evaluate_on_test_set(rf_clf, mlp, scaler)
 
     print("\nDone.  Run the visualizer and press  🤖 ML Select  to use the models.")

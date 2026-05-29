@@ -122,7 +122,7 @@ def solve_sa(
     rects = list(instance.rectangles)
     n = len(rects)
 
-    # ── logging ──────────────────────────────────────────────────────────────
+    # -- logging --------------------------------------------------------------
     _log = None
     if log_path is not None:
         _log = open(log_path, "w", buffering=1)
@@ -137,7 +137,7 @@ def solve_sa(
 
     t0 = time.perf_counter()
 
-    # ── initial solution: decreasing-height permutation ───────────────────
+    # -- initial solution: decreasing-height permutation -------------------
     current_perm = sorted(range(n), key=lambda i: -rects[i][1])
 
     if n < 2:
@@ -191,7 +191,7 @@ def solve_sa(
             "placements": [list(p) for p in current_plac],
         }) + "\n")
 
-    # ── SA main loop ──────────────────────────────────────────────────────
+    # -- SA main loop ------------------------------------------------------
     # Slow cooling ensures time_limit is the binding constraint on all but
     # the smallest instances.  T0=50 makes ~80 % of 5-unit uphill moves
     # acceptable initially, dropping to <5 % once T < 1.

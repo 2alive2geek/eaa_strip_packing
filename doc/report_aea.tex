@@ -1,6 +1,6 @@
 \documentclass[11pt,a4paper]{article}
 
-% ── Packages ──────────────────────────────────────────────────────────────────
+% -- Packages ------------------------------------------------------------------
 \usepackage[margin=2.5cm]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
@@ -17,7 +17,7 @@
 \usepackage{siunitx}
 \sisetup{round-mode=places, round-precision=2}
 
-% ── Meta ──────────────────────────────────────────────────────────────────────
+% -- Meta ----------------------------------------------------------------------
 \title{\textbf{Experimental Analysis of Strip Packing Algorithms}\\[0.4em]
        \large Comparative Study of Exact, Constructive, and Shelf Heuristics\\
        with Machine Learning Algorithm Selection}
@@ -31,7 +31,7 @@
 \tableofcontents
 \bigskip
 
-% ── Abstract ──────────────────────────────────────────────────────────────────
+% -- Abstract ------------------------------------------------------------------
 \begin{abstract}
 We present an experimental analysis of seven algorithm families for the
 Two-Dimensional Strip Packing Problem (2SP): the Bottom-Left-Fill (BLF)
@@ -54,9 +54,9 @@ Even on misclassified instances both models incur sub-1\% height regret,
 confirming the practical value of data-driven algorithm selection.
 \end{abstract}
 
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 \section{Introduction}
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 
 The \emph{Two-Dimensional Strip Packing Problem} (2SP) asks: given a strip of
 fixed width \(W\) and an unbounded height, and a set of \(n\)
@@ -94,9 +94,9 @@ ML-MLP & Neural Network (MLP)    & Algorithm selection  & $O(1)$ inference \\
 \end{tabular}
 \end{table}
 
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 \section{Problem Formulation}
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 
 Let \(\mathcal{R} = \{(w_i, h_i)\}_{i=1}^n\) be the set of rectangles and
 \(W \in \mathbb{Z}^+\) the strip width.
@@ -122,9 +122,9 @@ The \emph{gap} of a solution with height \(H\) relative to this bound is:
 \label{eq:gap}
 \end{equation}
 
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 \section{Algorithms}
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 
 \subsection{Bottom-Left-Fill (BLF)}
 
@@ -291,9 +291,9 @@ CV accuracy: $68.3\% \pm 6.2\%$ (identical to RF on this training set).
 The saved bundle contains the state dict, scaler, solver names, and input
 dimension, enabling inference without reimporting \texttt{train\_model.py}.
 
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 \section{Benchmark Instances}
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 
 Sixty instances from three classical benchmark families are used
 (Table~\ref{tab:benchmarks}).
@@ -317,9 +317,9 @@ Total & & 60 & & \\
 \end{tabular}
 \end{table}
 
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 \section{Experimental Results}
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 
 \subsection{BLF vs.\ Exact Solver}
 
@@ -742,9 +742,9 @@ Critically, even when the predicted solver is not the oracle, the \emph{mean
 regret is below 1\%} for both models, showing that the algorithm pool is
 dense around the optimum and wrong predictions are practically cheap.
 
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 \section{Discussion}
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 
 \paragraph{BLF vs.\ shelf methods.}
 BLF consistently outperforms both NFDH and FFDH on these benchmark instances
@@ -806,9 +806,9 @@ This is explained by the algorithm pool's density: on most instances,
 several heuristics achieve near-identical heights, so predicting the second-best
 incurs negligible cost.
 
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 \section{Conclusion}
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 
 We have implemented and experimentally compared seven algorithm families for
 the 2D Strip Packing Problem across 60 standard benchmark instances and
@@ -844,9 +844,9 @@ instances, adding a time-budget-aware candidate that switches between
 SA and BLF based on available resources, and exploring learning-to-rank
 approaches that leverage pairwise comparisons rather than single-winner labels.
 
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 \begin{thebibliography}{99}
-% ──────────────────────────────────────────────────────────────────────────────
+% ------------------------------------------------------------------------------
 
 \bibitem{Baker1980}
 B.~S. Baker, E.~G. Coffman Jr., and R.~L. Rivest,

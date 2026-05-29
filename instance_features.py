@@ -46,32 +46,32 @@ def extract_features(instance) -> list:
     ma = sum(aspects) / n
 
     return [
-        # ── instance size ──────────────────────────────────────────────
+        # -- instance size ----------------------------------------------
         n,
         W,
         alb,
 
-        # ── width statistics (normalised by W) ────────────────────────
+        # -- width statistics (normalised by W) ------------------------
         mw / W,           # mean width ratio
         _std(widths,  mw) / W,
         max(widths) / W,  # widest item fraction
         min(widths) / W,  # narrowest item fraction
 
-        # ── height statistics (normalised by area lower bound) ────────
+        # -- height statistics (normalised by area lower bound) --------
         mh / alb,
         _std(heights, mh) / alb,
         max(heights) / alb,
         min(heights) / alb,
 
-        # ── aspect-ratio statistics ───────────────────────────────────
+        # -- aspect-ratio statistics -----------------------------------
         ma,
         _std(aspects, ma),
 
-        # ── area / density ────────────────────────────────────────────
+        # -- area / density --------------------------------------------
         (total_area / n) / strip_area,  # mean item area / strip area
         total_area / strip_area,        # packing density at alb height (≈1)
 
-        # ── categorical fractions ─────────────────────────────────────
+        # -- categorical fractions -------------------------------------
         sum(1 for w in widths  if w > W / 2)       / n,  # "wide" items
         sum(1 for h in heights if h > alb / n)     / n,  # "tall" items
     ]

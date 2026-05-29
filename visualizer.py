@@ -50,7 +50,7 @@ _COLORS = [
     "#8CD17D", "#B6992D", "#F1CE63", "#D4A6C8", "#FABFD2",
 ]
 
-# ── Solver runner functions (called in background threads) ───────────────────
+# -- Solver runner functions (called in background threads) -------------------
 
 def _run_heuristic(instance, sort_key, log_path):
     """Run BLF. If sort_key='best', silently find the winner then re-run with logging."""
@@ -172,7 +172,7 @@ def _run_sa(instance, sort_key, log_path):
     solve_sa(instance, log_path=log_path)
 
 
-# ── Solver Registry ───────────────────────────────────────────────────────────
+# -- Solver Registry -----------------------------------------------------------
 # To add a new solver: append a dict with these keys:
 #   id     – unique string
 #   label  – button text
@@ -276,12 +276,12 @@ class VisualizerApp:
 
         self._build_ui()
 
-    # ── UI ────────────────────────────────────────────────────────────────
+    # -- UI ----------------------------------------------------------------
 
     def _build_ui(self):
         BG, FG, DIM = "#2A2A3A", "#DDDDDD", "#888899"
 
-        # ── Left panel ───────────────────────────────────────────────────
+        # -- Left panel ---------------------------------------------------
         left = tk.Frame(self.root, bg=BG, padx=14, pady=14, width=262)
         left.pack(side=tk.LEFT, fill=tk.Y)
         left.pack_propagate(False)
@@ -366,11 +366,11 @@ class VisualizerApp:
         tk.Label(left, text="Gap = (H − LB) / LB\narea_LB = ⌈Σ(w·h) / W⌉",
                  bg=BG, fg="#666688", font=("Helvetica", 8), justify="left").pack(anchor="w")
 
-        # ── Main area ────────────────────────────────────────────────────
+        # -- Main area ----------------------------------------------------
         main = tk.Frame(self.root, bg="#1A1A2B")
         main.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # ── Bottom toolbar (pack first so it anchors to bottom) ──────────
+        # -- Bottom toolbar (pack first so it anchors to bottom) ----------
         bottom = tk.Frame(main, bg="#111122", pady=7, padx=6)
         bottom.pack(side=tk.BOTTOM, fill=tk.X)
 
@@ -397,7 +397,7 @@ class VisualizerApp:
         tk.Label(bottom, textvariable=self._status, bg="#111122", fg="#888899",
                  font=("Helvetica", 9), anchor="w").pack(side=tk.LEFT)
 
-        # ── Decision log (above bottom bar) ─────────────────────────────
+        # -- Decision log (above bottom bar) -----------------------------
         log_frame = tk.Frame(main, bg="#0D0D1A", height=105)
         log_frame.pack(side=tk.BOTTOM, fill=tk.X)
         log_frame.pack_propagate(False)
@@ -415,11 +415,11 @@ class VisualizerApp:
         log_sb.pack(side=tk.RIGHT, fill=tk.Y)
         self._log_text.pack(fill=tk.BOTH, expand=True, padx=4)
 
-        # ── Content area (canvas + comparison panel side by side) ─────────
+        # -- Content area (canvas + comparison panel side by side) ---------
         content_frame = tk.Frame(main, bg="#1A1A2B")
         content_frame.pack(fill=tk.BOTH, expand=True)
 
-        # ── Comparison panel (right, shown only when ML Select is active) ─
+        # -- Comparison panel (right, shown only when ML Select is active) -
         self._comparison_panel = tk.Frame(content_frame, bg="#12121F", width=400)
         self._comparison_panel.pack_propagate(False)
         tk.Label(
@@ -441,7 +441,7 @@ class VisualizerApp:
         )
         self._oracle_label.pack(side=tk.BOTTOM, padx=6, pady=4)
 
-        # ── Canvas ───────────────────────────────────────────────────────
+        # -- Canvas -------------------------------------------------------
         self._canvas_frame = tk.Frame(content_frame, bg="#1A1A2B")
         self._canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True,
                                 padx=(6, 0), pady=(6, 0))
@@ -478,7 +478,7 @@ class VisualizerApp:
                  font=("Courier", 9, "bold")).pack(side=tk.LEFT)
         return val
 
-    # ── Solve dispatch ────────────────────────────────────────────────────
+    # -- Solve dispatch ----------------------------------------------------
 
     def _on_solve(self, solver_cfg):
         inst = self._instances[self._inst_var.get()]
@@ -577,7 +577,7 @@ class VisualizerApp:
             f"Random instance '{inst.name}' — n={inst.n}, W={inst.strip_width}"
         )
 
-    # ── Solver thread ─────────────────────────────────────────────────────
+    # -- Solver thread -----------------------------------------------------
 
     def _run_solver_thread(self, solver_cfg, inst, sort_key):
         try:
@@ -586,7 +586,7 @@ class VisualizerApp:
             with open(LOG_PATH, "a", buffering=1) as f:
                 f.write(json.dumps({"event": "error", "msg": str(e)}) + "\n")
 
-    # ── Log polling ───────────────────────────────────────────────────────
+    # -- Log polling -------------------------------------------------------
 
     def _poll_log(self):
         try:
@@ -617,7 +617,7 @@ class VisualizerApp:
         if self._running or alive:
             self.root.after(60, self._poll_log)
 
-    # ── Animation loop ────────────────────────────────────────────────────
+    # -- Animation loop ----------------------------------------------------
 
     def _animate_next(self):
         if not self._running:
@@ -647,7 +647,7 @@ class VisualizerApp:
 
         self.root.after(delay, self._animate_next)
 
-    # ── Event handlers ────────────────────────────────────────────────────
+    # -- Event handlers ----------------------------------------------------
 
     def _handle_event(self, evt):
         etype = evt.get("event")
@@ -775,7 +775,7 @@ class VisualizerApp:
                 btn.config(state=tk.NORMAL)
             self._stop_btn.config(state=tk.DISABLED)
 
-    # ── Drawing ───────────────────────────────────────────────────────────
+    # -- Drawing -----------------------------------------------------------
 
     def _canvas_y(self, strip_y: float) -> float:
         """Strip y=0 is bottom; canvas y=0 is top."""
@@ -865,7 +865,7 @@ class VisualizerApp:
                 font=("Helvetica", 8), anchor="e", tags="border",
             )
 
-    # ── Decision log ──────────────────────────────────────────────────────
+    # -- Decision log ------------------------------------------------------
 
     def _log_line(self, text: str):
         self._log_text.config(state=tk.NORMAL)
@@ -878,7 +878,7 @@ class VisualizerApp:
         self._log_text.delete("1.0", tk.END)
         self._log_text.config(state=tk.DISABLED)
 
-    # ── Zoom / pan handlers ─────────────────────────────────────────────────
+    # -- Zoom / pan handlers -------------------------------------------------
 
     def _on_mousewheel(self, event):
         """Zoom in/out centred on the cursor position."""
@@ -924,7 +924,7 @@ class VisualizerApp:
         self._pan_y = 0.0
         self._redraw_canvas()
 
-    # ── Comparison panel ──────────────────────────────────────────────────
+    # -- Comparison panel --------------------------------------------------
 
     def _show_comparison_panel(self):
         if not self._comparison_visible:
@@ -1047,7 +1047,7 @@ class VisualizerApp:
         ax1 = fig.add_subplot(211)
         ax2 = fig.add_subplot(212)
 
-        # ── Height chart ──────────────────────────────────────────────────
+        # -- Height chart --------------------------------------------------
         bars1 = ax1.bar(range(len(names)), h_vals, color=bar_colors,
                         edgecolor="#2A2A3A", linewidth=0.6)
         ax1.axhline(self._area_lb, color="#E15759", linestyle="--",
@@ -1069,7 +1069,7 @@ class VisualizerApp:
                      str(val), ha="center", va="bottom",
                      fontsize=5.5, color="#DDDDEE")
 
-        # ── Time chart ────────────────────────────────────────────────────
+        # -- Time chart ----------------------------------------------------
         bars2 = ax2.bar(range(len(names)), t_vals, color=bar_colors,
                         edgecolor="#2A2A3A", linewidth=0.6)
         ax2.set_title("Solve Time (ms)", color="#CCCCDD", fontsize=8, pad=3)
@@ -1087,7 +1087,7 @@ class VisualizerApp:
                      f"{val:.1f}", ha="center", va="bottom",
                      fontsize=5.5, color="#DDDDEE")
 
-        # ── Supra-title ───────────────────────────────────────────────────
+        # -- Supra-title ---------------------------------------------------
         if self._current_solver_id == "sa" and "sa" in heights:
             sa_h  = heights["sa"]
             ora_h = heights.get(oracle_name, float("inf")) if oracle_name else float("inf")
@@ -1107,7 +1107,7 @@ class VisualizerApp:
         mpl_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=2, pady=(0, 2))
         self._comparison_mpl_canvas = mpl_canvas
 
-        # ── Oracle verdict label ──────────────────────────────────────────
+        # -- Oracle verdict label ------------------------------------------
         if self._current_solver_id == "sa" and "sa" in heights and oracle_name:
             sa_h  = heights["sa"]
             ora_h = heights[oracle_name]
