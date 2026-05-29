@@ -33,10 +33,12 @@ try:
 except ImportError:
     _HAS_MATPLOTLIB = False
 
-from benchmarks import get_all_benchmarks
+from benchmarks import get_all_benchmarks, generate_random_instance
 from solver_heuristic import solve_blf
 from solver_exact import solve_exact
 from solver_shelf import solve_nfdh, solve_ffdh
+from solver_skyline import solve_skyline
+from solver_sa import solve_sa
 
 LOG_PATH = "strip_packing_vis.log"
 _PAD = 32
@@ -83,27 +85,57 @@ def _run_ml_advisor(instance, sort_key, log_path):
     """
     Use the trained ML model to predict the best heuristic, then run it
     with full step-by-step logging so the visualizer animates the placement.
+    sort_key encodes the model type: "RF" (Random Forest) or "MLP" (neural net).
     Falls back to best-of-BLF if the model file is not found.
     """
-    chosen_id = "blf_height"   # safe default
+    model_type = sort_key  # "RF" or "MLP"
+    chosen_id = "blf_height"  # safe default
 
     try:
         import joblib
         import numpy as np
         from instance_features import extract_features
-        bundle  = joblib.load("best_solver_model.pkl")
-        feats   = np.array(extract_features(instance), dtype=float).reshape(1, -1)
-        idx     = bundle["model"].predict(feats)[0]
-        chosen_id = bundle["solver_names"][idx]
+
+        if model_type == "MLP":
+            import torch
+            import torch.nn as nn
+            bundle = joblib.load("best_solver_model_nn.pkl")
+
+            class _MLP(nn.Module):
+                def __init__(self, inp, nc):
+                    super().__init__()
+                    self.net = nn.Sequential(
+                        nn.Linear(inp, 64), nn.ReLU(), nn.Dropout(0.2),
+                        nn.Linear(64, 32), nn.ReLU(),
+                        nn.Linear(32, nc),
+                    )
+                def forward(self, x): return self.net(x)
+
+            mlp = _MLP(bundle["input_dim"], bundle["n_classes"])
+            mlp.load_state_dict(bundle["state_dict"])
+            mlp.eval()
+            feats = bundle["scaler"].transform([extract_features(instance)])
+            with torch.no_grad():
+                idx = int(mlp(torch.tensor(feats, dtype=torch.float32)).argmax(dim=1).item())
+            chosen_id = bundle["solver_names"][idx]
+        else:
+            bundle = joblib.load("best_solver_model.pkl")
+            feats = np.array(extract_features(instance), dtype=float).reshape(1, -1)
+            idx = int(bundle["model"].predict(feats)[0])
+            chosen_id = bundle["solver_names"][idx]
     except FileNotFoundError:
-        # No model yet – pick best BLF sort strategy silently
         best_h = float("inf")
         for sk in ("height", "width", "area", "perimeter"):
             r = solve_blf(instance, sort_key=sk)
             if r["height"] < best_h:
                 best_h, chosen_id = r["height"], f"blf_{sk}"
     except Exception:
-        pass   # use default
+        pass  # use default
+
+    # Emit an ml_choice event so the visualizer can show the oracle comparison.
+    with open(log_path, "a", buffering=1) as _lf:
+        _lf.write(json.dumps({"event": "ml_choice", "chosen_id": chosen_id,
+                               "model_type": model_type}) + "\n")
 
     # Dispatch to the chosen solver WITH log_path so events are emitted
     # and the visualizer can animate them step by step.
@@ -112,10 +144,32 @@ def _run_ml_advisor(instance, sort_key, log_path):
     elif chosen_id == "ffdh":
         solve_ffdh(instance, log_path=log_path)
     elif chosen_id.startswith("blf_"):
-        sk = chosen_id[4:]   # strip "blf_" prefix  → "height", "width", …
+        sk = chosen_id[4:]
         solve_blf(instance, sort_key=sk, log_path=log_path)
+    elif chosen_id.startswith("sky_"):
+        sk = chosen_id[4:]
+        solve_skyline(instance, sort_key=sk, log_path=log_path)
     else:
         solve_blf(instance, sort_key="height", log_path=log_path)
+
+
+def _run_skyline(instance, sort_key, log_path):
+    """Run Skyline heuristic. If sort_key='best', try all 4 sorts and replay the winner."""
+    if sort_key == "best":
+        best_key, best_h = "height", float("inf")
+        for sk in ("height", "width", "area", "perimeter"):
+            r = solve_skyline(instance, sort_key=sk)
+            if r["height"] < best_h:
+                best_h, best_key = r["height"], sk
+        open(log_path, "w").close()
+        solve_skyline(instance, sort_key=best_key, log_path=log_path)
+    else:
+        solve_skyline(instance, sort_key=sort_key, log_path=log_path)
+
+
+def _run_sa(instance, sort_key, log_path):
+    """Run Simulated Annealing (10 s budget, instant-mode render)."""
+    solve_sa(instance, log_path=log_path)
 
 
 # ── Solver Registry ───────────────────────────────────────────────────────────
@@ -149,8 +203,22 @@ SOLVER_REGISTRY = [
         "run":   _run_ffdh,
     },
     {
+        "id":    "skyline",
+        "label": "▶  Skyline",
+        "bg":    "#1A6A5A",
+        "mode":  "animated",
+        "run":   _run_skyline,
+    },
+    {
+        "id":    "sa",
+        "label": "▶  SA (10s)",
+        "bg":    "#7A4F1D",
+        "mode":  "instant",
+        "run":   _run_sa,
+    },
+    {
         "id":    "exact",
-        "label": "▶  Exact (CP-SAT)",
+        "label": "▶  Exact",
         "bg":    "#2471A3",
         "mode":  "instant",
         "run":   _run_exact,
@@ -200,6 +268,8 @@ class VisualizerApp:
         self._comparison_visible = False
         self._comparison_mpl_canvas = None
         self._ml_chosen_sk = None
+        self._ml_chosen_id = None   # full solver id from ml_choice event
+        self._oracle_id = None      # actual best solver from comparison data
         self._last_comparison_data = None  # (heights_dict, times_dict)
 
         self._build_ui()
@@ -221,8 +291,22 @@ class VisualizerApp:
         tk.Label(left, text="INSTANCE", bg=BG, fg=DIM,
                  font=("Helvetica", 8, "bold")).pack(anchor="w")
         self._inst_var = tk.StringVar(value=self._inst_names[0])
-        ttk.Combobox(left, textvariable=self._inst_var, values=self._inst_names,
-                     width=27, state="readonly").pack(anchor="w", pady=(2, 12))
+        inst_row = tk.Frame(left, bg=BG)
+        inst_row.pack(anchor="w", pady=(2, 2), fill=tk.X)
+        self._inst_combo = ttk.Combobox(
+            inst_row, textvariable=self._inst_var, values=self._inst_names,
+            width=21, state="readonly",
+        )
+        self._inst_combo.pack(side=tk.LEFT)
+        tk.Button(
+            inst_row, text="🎲", width=3, bg="#2E5E4E", fg="white",
+            font=("Helvetica", 10), relief=tk.FLAT, cursor="hand2",
+            command=self._on_random_instance,
+        ).pack(side=tk.LEFT, padx=(4, 0))
+        tk.Label(inst_row, text="rand", bg=BG, fg="#556677",
+                 font=("Helvetica", 7)).pack(side=tk.LEFT, padx=(2, 0))
+
+        tk.Frame(left, bg=BG, height=6).pack()  # small spacer
 
         # Sort strategy
         tk.Label(left, text="SORT STRATEGY  (heuristic only)", bg=BG, fg=DIM,
@@ -237,6 +321,17 @@ class VisualizerApp:
         ]:
             tk.Radiobutton(left, text=lbl, variable=self._sort_var, value=val,
                            bg=BG, fg=FG, selectcolor="#4E79A7",
+                           activebackground=BG, activeforeground="#FFF",
+                           font=("Helvetica", 9)).pack(anchor="w")
+
+        # ML model selector
+        tk.Frame(left, bg="#44445A", height=1).pack(fill=tk.X, pady=(10, 4))
+        tk.Label(left, text="ML MODEL", bg=BG, fg=DIM,
+                 font=("Helvetica", 8, "bold")).pack(anchor="w")
+        self._ml_model_var = tk.StringVar(value="RF")
+        for val, lbl in [("RF", "Random Forest (RF)"), ("MLP", "Neural Network (MLP)")]:
+            tk.Radiobutton(left, text=lbl, variable=self._ml_model_var, value=val,
+                           bg=BG, fg=FG, selectcolor="#6E2F8E",
                            activebackground=BG, activeforeground="#FFF",
                            font=("Helvetica", 9)).pack(anchor="w")
 
@@ -280,12 +375,12 @@ class VisualizerApp:
         self._solver_btns = []
         for cfg in SOLVER_REGISTRY:
             btn = tk.Button(
-                bottom, text=cfg["label"], width=16,
+                bottom, text=cfg["label"], width=13,
                 bg=cfg["bg"], fg="white", font=("Helvetica", 10, "bold"),
                 relief=tk.FLAT, cursor="hand2",
                 command=lambda c=cfg: self._on_solve(c),
             )
-            btn.pack(side=tk.LEFT, padx=(0, 6))
+            btn.pack(side=tk.LEFT, padx=(0, 4))
             self._solver_btns.append(btn)
 
         self._stop_btn = tk.Button(
@@ -323,7 +418,7 @@ class VisualizerApp:
         content_frame.pack(fill=tk.BOTH, expand=True)
 
         # ── Comparison panel (right, shown only when ML Select is active) ─
-        self._comparison_panel = tk.Frame(content_frame, bg="#12121F", width=380)
+        self._comparison_panel = tk.Frame(content_frame, bg="#12121F", width=400)
         self._comparison_panel.pack_propagate(False)
         tk.Label(
             self._comparison_panel,
@@ -337,6 +432,12 @@ class VisualizerApp:
             bg="#12121F", fg="#888899", font=("Helvetica", 9),
         )
         self._comparison_loading_label.pack(pady=20)
+        self._oracle_label = tk.Label(
+            self._comparison_panel, text="",
+            bg="#12121F", fg="#59A14F",
+            font=("Helvetica", 10, "bold"), wraplength=390,
+        )
+        self._oracle_label.pack(side=tk.BOTTOM, padx=6, pady=4)
 
         # ── Canvas ───────────────────────────────────────────────────────
         self._canvas_frame = tk.Frame(content_frame, bg="#1A1A2B")
@@ -421,6 +522,9 @@ class VisualizerApp:
         # Show comparison panel only for ML Select; hide for all other solvers
         if solver_cfg["id"] == "ml":
             self._ml_chosen_sk = None
+            self._ml_chosen_id = None
+            self._oracle_id = None
+            self._oracle_label.config(text="")
             self._last_comparison_data = None
             self._show_comparison_panel()
             threading.Thread(
@@ -431,9 +535,16 @@ class VisualizerApp:
         else:
             self._hide_comparison_panel()
 
+        # For ML solver, pass the chosen model type via sort_key.
+        effective_sort_key = (
+            self._ml_model_var.get()
+            if solver_cfg["id"] == "ml"
+            else self._sort_var.get()
+        )
+
         self._solver_thread = threading.Thread(
             target=self._run_solver_thread,
-            args=(solver_cfg, inst, self._sort_var.get()),
+            args=(solver_cfg, inst, effective_sort_key),
             daemon=True,
         )
         self._solver_thread.start()
@@ -447,6 +558,19 @@ class VisualizerApp:
             btn.config(state=tk.NORMAL)
         self._stop_btn.config(state=tk.DISABLED)
         self._status.set("Stopped.")
+
+    def _on_random_instance(self):
+        """Generate a fresh random instance and select it in the combobox."""
+        import random as _rnd
+        seed = _rnd.randint(1, 999_999)
+        inst = generate_random_instance(seed=seed)
+        self._instances[inst.name] = inst
+        self._inst_names = sorted(self._instances)
+        self._inst_combo.configure(values=self._inst_names)
+        self._inst_var.set(inst.name)
+        self._status.set(
+            f"Random instance '{inst.name}' — n={inst.n}, W={inst.strip_width}"
+        )
 
     # ── Solver thread ─────────────────────────────────────────────────────
 
@@ -582,6 +706,15 @@ class VisualizerApp:
             for btn in self._solver_btns:
                 btn.config(state=tk.NORMAL)
             self._stop_btn.config(state=tk.DISABLED)
+
+        elif etype == "ml_choice":
+            self._ml_chosen_id = evt.get("chosen_id", "?")
+            mt = evt.get("model_type", "RF")
+            self._log_line(f"ℹ  ML ({mt}) chose: {self._ml_chosen_id}")
+            self._status.set(f"ML ({mt}) selected: {self._ml_chosen_id} — running…")
+            if self._last_comparison_data is not None:
+                heights_d, times_d = self._last_comparison_data
+                self._draw_comparison_chart(heights_d, times_d)
 
         elif etype == "info":
             msg = evt.get("msg", "")
@@ -768,7 +901,7 @@ class VisualizerApp:
             self._comparison_visible = False
 
     def _run_all_solvers_thread(self, inst):
-        """Run all 6 heuristic solvers silently and collect heights + times."""
+        """Run all fast heuristic solvers (BLF + Shelf + Skyline) silently."""
         candidates = [
             ("blf_height",    lambda i: solve_blf(i, sort_key="height")),
             ("blf_width",     lambda i: solve_blf(i, sort_key="width")),
@@ -776,6 +909,10 @@ class VisualizerApp:
             ("blf_perimeter", lambda i: solve_blf(i, sort_key="perimeter")),
             ("nfdh",          solve_nfdh),
             ("ffdh",          solve_ffdh),
+            ("sky_height",    lambda i: solve_skyline(i, sort_key="height")),
+            ("sky_width",     lambda i: solve_skyline(i, sort_key="width")),
+            ("sky_area",      lambda i: solve_skyline(i, sort_key="area")),
+            ("sky_perimeter", lambda i: solve_skyline(i, sort_key="perimeter")),
         ]
         heights, times = {}, {}
         for name, solver in candidates:
@@ -789,8 +926,10 @@ class VisualizerApp:
         self.root.after(0, self._update_comparison_chart, heights, times)
 
     def _update_comparison_chart(self, heights, times):
-        """Store comparison results and render the chart."""
+        """Store comparison results, compute oracle, and render the chart."""
         self._last_comparison_data = (heights, times)
+        # oracle = solver with the lowest height (ties broken alphabetically)
+        self._oracle_id = min(heights, key=lambda k: (heights[k], k))
         self._draw_comparison_chart(heights, times)
 
     def _draw_comparison_chart(self, heights, times):
@@ -805,24 +944,39 @@ class VisualizerApp:
             )
             return
 
-        _SK_TO_ID = {
-            "height": "blf_height", "width": "blf_width",
-            "area": "blf_area",     "perimeter": "blf_perimeter",
-            "nfdh": "nfdh",         "ffdh": "ffdh",
-        }
-        chosen_name = _SK_TO_ID.get(self._ml_chosen_sk) if self._ml_chosen_sk else None
+        chosen_name = self._ml_chosen_id   # full solver id, e.g. "blf_width"
+        oracle_name = self._oracle_id       # actual best, e.g. "ffdh"
 
         names  = list(heights.keys())
         h_vals = [heights[n] for n in names]
         t_vals = [times[n] * 1000 for n in names]   # → milliseconds
 
         short_labels = {
-            "blf_height": "BLF\nHeight", "blf_width": "BLF\nWidth",
-            "blf_area":   "BLF\nArea",   "blf_perimeter": "BLF\nPerim.",
-            "nfdh": "NFDH",              "ffdh": "FFDH",
+            "blf_height": "BLF\nH", "blf_width": "BLF\nW",
+            "blf_area":   "BLF\nA", "blf_perimeter": "BLF\nP",
+            "nfdh": "NFDH",         "ffdh": "FFDH",
+            "sky_height": "Sky\nH", "sky_width": "Sky\nW",
+            "sky_area":   "Sky\nA", "sky_perimeter": "Sky\nP",
         }
-        labels     = [short_labels.get(n, n) for n in names]
-        bar_colors = ["#F28E2B" if n == chosen_name else "#4E79A7" for n in names]
+        labels = [short_labels.get(n, n) for n in names]
+
+        # Colour coding:
+        #   gold (#EDC948)  — ML chose this AND it is the oracle (correct!)
+        #   orange (#F28E2B) — ML chose this but it is NOT the oracle (wrong)
+        #   green (#59A14F)  — oracle (actual best), not ML choice
+        #   blue (#4E79A7)   — all others
+        def _bar_color(n):
+            is_ml     = (n == chosen_name)
+            is_oracle = (n == oracle_name)
+            if is_ml and is_oracle:
+                return "#EDC948"
+            if is_ml:
+                return "#F28E2B"
+            if is_oracle:
+                return "#59A14F"
+            return "#4E79A7"
+
+        bar_colors = [_bar_color(n) for n in names]
 
         # Tear down previous figure
         if self._comparison_mpl_canvas is not None:
@@ -830,9 +984,9 @@ class VisualizerApp:
             self._comparison_mpl_canvas = None
         self._comparison_loading_label.pack_forget()
 
-        fig = Figure(figsize=(3.8, 5.5), dpi=90, facecolor="#12121F")
-        fig.subplots_adjust(left=0.18, right=0.95, top=0.91,
-                            bottom=0.12, hspace=0.55)
+        fig = Figure(figsize=(4.0, 5.2), dpi=90, facecolor="#12121F")
+        fig.subplots_adjust(left=0.16, right=0.97, top=0.91,
+                            bottom=0.14, hspace=0.58)
         ax1 = fig.add_subplot(211)
         ax2 = fig.add_subplot(212)
 
@@ -843,9 +997,9 @@ class VisualizerApp:
                     linewidth=1.0, label=f"LB={self._area_lb}")
         ax1.set_title("Packing Height", color="#CCCCDD", fontsize=8, pad=3)
         ax1.set_xticks(range(len(names)))
-        ax1.set_xticklabels(labels, fontsize=6.5, color="#AAAACC")
+        ax1.set_xticklabels(labels, fontsize=5.5, color="#AAAACC")
         ax1.set_ylabel("Height", color="#AAAACC", fontsize=7)
-        ax1.tick_params(axis="both", colors="#AAAACC", labelsize=6.5)
+        ax1.tick_params(axis="both", colors="#AAAACC", labelsize=5.5)
         ax1.set_facecolor("#1A1A2B")
         for sp in ax1.spines.values():
             sp.set_color("#334455")
@@ -856,16 +1010,16 @@ class VisualizerApp:
             ax1.text(bar.get_x() + bar.get_width() / 2,
                      bar.get_height() + max_h * 0.015,
                      str(val), ha="center", va="bottom",
-                     fontsize=6, color="#DDDDEE")
+                     fontsize=5.5, color="#DDDDEE")
 
         # ── Time chart ────────────────────────────────────────────────────
         bars2 = ax2.bar(range(len(names)), t_vals, color=bar_colors,
                         edgecolor="#2A2A3A", linewidth=0.6)
         ax2.set_title("Solve Time (ms)", color="#CCCCDD", fontsize=8, pad=3)
         ax2.set_xticks(range(len(names)))
-        ax2.set_xticklabels(labels, fontsize=6.5, color="#AAAACC")
+        ax2.set_xticklabels(labels, fontsize=5.5, color="#AAAACC")
         ax2.set_ylabel("Time (ms)", color="#AAAACC", fontsize=7)
-        ax2.tick_params(axis="both", colors="#AAAACC", labelsize=6.5)
+        ax2.tick_params(axis="both", colors="#AAAACC", labelsize=5.5)
         ax2.set_facecolor("#1A1A2B")
         for sp in ax2.spines.values():
             sp.set_color("#334455")
@@ -874,18 +1028,37 @@ class VisualizerApp:
             ax2.text(bar.get_x() + bar.get_width() / 2,
                      bar.get_height() + max_t * 0.015,
                      f"{val:.1f}", ha="center", va="bottom",
-                     fontsize=6, color="#DDDDEE")
+                     fontsize=5.5, color="#DDDDEE")
 
         # ── Supra-title ───────────────────────────────────────────────────
-        title_text  = f"ML chose: {chosen_name}" if chosen_name else "All Solvers Comparison"
-        title_color = "#F28E2B" if chosen_name else "#CCCCDD"
+        if chosen_name:
+            title_text = f"ML chose: {chosen_name}"
+            title_color = "#EDC948" if chosen_name == oracle_name else "#F28E2B"
+        else:
+            title_text = "All Solvers Comparison"
+            title_color = "#CCCCDD"
         fig.text(0.5, 0.965, title_text, ha="center", va="top",
                  fontsize=7.5, color=title_color, fontweight="bold")
 
         mpl_canvas = FigureCanvasTkAgg(fig, master=self._comparison_panel)
         mpl_canvas.draw()
-        mpl_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=2, pady=(0, 4))
+        mpl_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=2, pady=(0, 2))
         self._comparison_mpl_canvas = mpl_canvas
+
+        # ── Oracle verdict label ──────────────────────────────────────────
+        if chosen_name and oracle_name:
+            if chosen_name == oracle_name:
+                self._oracle_label.config(
+                    text=f"✓ ML correct — oracle: {oracle_name}",
+                    fg="#59A14F",
+                )
+            else:
+                self._oracle_label.config(
+                    text=f"✗ ML wrong — oracle: {oracle_name}",
+                    fg="#E15759",
+                )
+        else:
+            self._oracle_label.config(text="")
 
 
 def main():

@@ -151,6 +151,87 @@ def get_small_benchmarks(seed=42):
     all_instances = get_all_benchmarks(seed)
     return [inst for inst in all_instances if inst.n <= 20]
 
+def generate_random_instance(seed=None) -> "Instance":
+    """
+    Generate a single random strip-packing instance.
+
+    Parameter ranges cover the full span of all benchmark families:
+      - n_rects ∈ [10, 150]
+      - W       ∈ [10, 300]
+      - widths and heights uniformly drawn from [1, W]
+
+    Args:
+        seed: random seed for reproducibility.  Pass None (default) for a
+              fresh random instance each call.
+
+    Returns:
+        An Instance named ``rand_<seed>`` (or ``rand_<random-tag>`` if seed
+        is None).
+    """
+    rng = random.Random(seed)
+    n = rng.randint(10, 150)
+    W = rng.randint(10, 300)
+    rects = [(rng.randint(1, W), rng.randint(1, W)) for _ in range(n)]
+    tag = seed if seed is not None else rng.randint(10000, 99999)
+    return Instance(f"rand_{tag}", W, rects)
+
+
+def generate_test_set(n: int = 100, seed: int = 999) -> list:
+    """
+    Generate *n* random test instances for ML model evaluation.
+
+    Uses a different base seed (999) from all benchmark families (42) so
+    there is no overlap with training data.
+
+    Four rectangle-generation styles are sampled uniformly to ensure the
+    test set covers the same diversity as the benchmark families:
+      - style 0: uniform [1, W] × [1, W]          (Bengtsson / BW-C5)
+      - style 1: wide items  [W/3, W] × [1, W/2]  (MV class 3)
+      - style 2: tall items  [1, W/2] × [W/3, W]  (MV class 4)
+      - style 3: small items [1, W/3] × [1, W/3]  (BW classes 1-2)
+
+    Args:
+        n:    number of instances to generate (default 100).
+        seed: base random seed (default 999).
+
+    Returns:
+        List of n Instance objects named ``test_1`` … ``test_n``.
+    """
+    rng = random.Random(seed)
+    instances = []
+    for i in range(n):
+        n_rects = rng.randint(10, 150)
+        W = rng.randint(10, 300)
+        style = rng.randint(0, 3)
+        if style == 0:
+            rects = [
+                (rng.randint(1, W), rng.randint(1, W))
+                for _ in range(n_rects)
+            ]
+        elif style == 1:
+            w_lo = max(1, W // 3)
+            h_hi = max(1, W // 2)
+            rects = [
+                (rng.randint(w_lo, W), rng.randint(1, h_hi))
+                for _ in range(n_rects)
+            ]
+        elif style == 2:
+            w_hi = max(1, W // 2)
+            h_lo = max(1, W // 3)
+            rects = [
+                (rng.randint(1, w_hi), rng.randint(h_lo, W))
+                for _ in range(n_rects)
+            ]
+        else:
+            max_dim = max(1, W // 3)
+            rects = [
+                (rng.randint(1, max_dim), rng.randint(1, max_dim))
+                for _ in range(n_rects)
+            ]
+        instances.append(Instance(f"test_{i + 1}", W, rects))
+    return instances
+
+
 generation_cfg_list = [
     ("Bengtsson", generate_bengtsson),
     ("Berkey & Wang", generate_berkey_wang),

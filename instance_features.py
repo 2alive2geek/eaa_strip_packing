@@ -5,7 +5,7 @@ Shared between train_model.py (training) and the visualizer's ML advisor
 (inference at run-time).  Uses only the Python standard library so it
 stays importable without numpy/scikit-learn installed.
 
-The features are all dimensionless (normalised) so the model generalises
+The features are all dimensionless (normaliZed) so the model generaliZes
 across different strip widths and instance sizes.
 
 Feature names (in order):
