@@ -146,6 +146,13 @@ def solve_sa(
         elapsed = time.perf_counter() - t0
         if _log is not None:
             _log.write(json.dumps({
+                "event":      "improvement",
+                "iteration":  0,
+                "height":     init_h,
+                "elapsed":    elapsed,
+                "placements": [list(p) for p in init_placements],
+            }) + "\n")
+            _log.write(json.dumps({
                 "event":       "done",
                 "height":      init_h,
                 "init_height": init_h,
@@ -165,7 +172,7 @@ def solve_sa(
             "init_height": init_h,
         }
 
-    current_h, _ = _eval_perm(current_perm, rects, W)
+    current_h, current_plac = _eval_perm(current_perm, rects, W)
     init_h = current_h
     best_h = current_h
     best_placements: list[tuple[int, int, int, int]] = []
@@ -173,6 +180,16 @@ def solve_sa(
     # Keep a separate best permutation so we can reconstruct placements once
     # at the end rather than copying them on every improvement.
     best_perm = current_perm[:]
+
+    # Show the initial greedy arrangement in the visualizer immediately.
+    if _log is not None:
+        _log.write(json.dumps({
+            "event":      "improvement",
+            "iteration":  0,
+            "height":     best_h,
+            "elapsed":    time.perf_counter() - t0,
+            "placements": [list(p) for p in current_plac],
+        }) + "\n")
 
     # ── SA main loop ──────────────────────────────────────────────────────
     # Slow cooling ensures time_limit is the binding constraint on all but
@@ -189,13 +206,21 @@ def solve_sa(
             # Swap move: exchange two random positions.
             i, j = random.sample(range(n), 2)
             current_perm[i], current_perm[j] = current_perm[j], current_perm[i]
-            new_h, _ = _eval_perm(current_perm, rects, W)
+            new_h, new_plac = _eval_perm(current_perm, rects, W)
             delta = new_h - current_h
             if delta <= 0 or random.random() < math.exp(-delta / T):
                 current_h = new_h
                 if new_h < best_h:
                     best_h = new_h
                     best_perm = current_perm[:]
+                    if _log is not None:
+                        _log.write(json.dumps({
+                            "event":      "improvement",
+                            "iteration":  iteration,
+                            "height":     best_h,
+                            "elapsed":    time.perf_counter() - t0,
+                            "placements": [list(p) for p in new_plac],
+                        }) + "\n")
             else:
                 current_perm[i], current_perm[j] = current_perm[j], current_perm[i]
         else:
@@ -206,13 +231,21 @@ def solve_sa(
                 j += 1
             item = current_perm.pop(i)
             current_perm.insert(j, item)
-            new_h, _ = _eval_perm(current_perm, rects, W)
+            new_h, new_plac = _eval_perm(current_perm, rects, W)
             delta = new_h - current_h
             if delta <= 0 or random.random() < math.exp(-delta / T):
                 current_h = new_h
                 if new_h < best_h:
                     best_h = new_h
                     best_perm = current_perm[:]
+                    if _log is not None:
+                        _log.write(json.dumps({
+                            "event":      "improvement",
+                            "iteration":  iteration,
+                            "height":     best_h,
+                            "elapsed":    time.perf_counter() - t0,
+                            "placements": [list(p) for p in new_plac],
+                        }) + "\n")
             else:
                 # Revert insertion: remove from j, put back at i.
                 current_perm.pop(j)

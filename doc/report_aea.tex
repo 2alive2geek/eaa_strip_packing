@@ -21,8 +21,9 @@
 \title{\textbf{Experimental Analysis of Strip Packing Algorithms}\\[0.4em]
        \large Comparative Study of Exact, Constructive, and Shelf Heuristics\\
        with Machine Learning Algorithm Selection}
-\author{[Your Name]}
-\affil{[Your Department / University]}
+\author{Andrei Mărisac}
+\affil{Facultatea de Informatică\\Universitatea Alexandru-Ioan Cuza Iași}
+\affil{}
 \date{May 2026}
 
 \begin{document}
@@ -654,6 +655,83 @@ MLP (PyTorch)       & 34.0\% & 41.0\% & 0.94\% & 11.49\% \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{figure}[h]
+\centering
+\begin{subfigure}[b]{0.46\textwidth}
+\begin{tikzpicture}
+\begin{axis}[
+    ybar stacked,
+    bar width = 18pt,
+    width  = \textwidth,
+    height = 5.5cm,
+    ylabel = {Instances (\%)},
+    xtick  = {1,2},
+    xticklabels = {RF, MLP},
+    xmin = 0.4, xmax = 2.6,
+    ymin = 0, ymax = 105,
+    ytick = {0,20,40,60,80,100},
+    legend style = {at={(0.5,-0.22)}, anchor=north, legend columns=1,
+                    font=\small},
+    tick label style = {font=\small},
+    label style = {font=\small},
+    title = {Prediction outcome breakdown},
+    title style = {font=\small\bfseries},
+    enlarge x limits = 0.4,
+]
+% Exact match (dark green)
+\addplot+[fill=teal!70!black, draw=teal!40!black]
+    coordinates {(1,45) (2,34)};
+% Zero-regret, wrong solver (medium blue)
+\addplot+[fill=blue!40, draw=blue!60]
+    coordinates {(1,6) (2,7)};
+% Positive regret (orange-red)
+\addplot+[fill=orange!70, draw=orange!90!black]
+    coordinates {(1,49) (2,59)};
+\legend{Exact match, Zero-regret (wrong solver), Positive regret}
+\end{axis}
+\end{tikzpicture}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.50\textwidth}
+\begin{tikzpicture}
+\begin{axis}[
+    width  = \textwidth,
+    height = 5.5cm,
+    xlabel = {Regret threshold (\%)},
+    ylabel = {Instances with regret $\le$ threshold (\%)},
+    xmin = 0, xmax = 10,
+    ymin = 35, ymax = 102,
+    xtick = {0,2,4,6,8,10},
+    ytick = {40,50,60,70,80,90,100},
+    legend pos = south east,
+    legend style = {font=\small},
+    tick label style = {font=\small},
+    label style = {font=\small},
+    title = {Cumulative regret distribution (CDF)},
+    title style = {font=\small\bfseries},
+    grid = major,
+    grid style = {dashed, gray!30},
+]
+\addplot[color=teal!80!black, thick, mark=*, mark size=1.5pt]
+    coordinates {(0,51)(0.5,65)(1,75)(1.5,81)(2,90)(3,94)(4,96)(5,98)(6,98)(8,99)(10,100)};
+\addlegendentry{RF}
+\addplot[color=orange!80!black, thick, mark=square*, mark size=1.5pt, dashed]
+    coordinates {(0,41)(0.5,57)(1,69)(1.5,78)(2,87)(3,92)(4,96)(5,98)(6,98)(8,98)(10,99)};
+\addlegendentry{MLP}
+\end{axis}
+\end{tikzpicture}
+\end{subfigure}
+\caption{ML model comparison on 100 held-out test instances (seed=999).
+\emph{Left}: outcome breakdown — exact match means the predicted solver equals
+the oracle; zero-regret/wrong means the predicted solver achieves the same
+height as the oracle but is a different solver.
+\emph{Right}: cumulative distribution of relative regret
+$(H_\text{pred}-H_\text{oracle})/H_\text{oracle}\times100\%$.
+RF dominates MLP at all thresholds up to 3\%, but both models keep
+regret below 2\% on $\ge$87\% of instances.}
+\label{fig:ml_cdf}
+\end{figure}
 
 The RF generalises considerably better than the MLP despite identical
 cross-validation accuracy (68.3\% for both).

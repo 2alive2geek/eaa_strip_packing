@@ -264,13 +264,15 @@ class VisualizerApp:
         self._fit_scale = 1.0     # scale that fits the whole strip (no zoom)
         self._drag_start = None   # (canvas_x, canvas_y, pan_x0, pan_y0)
 
-        # Comparison panel state (shown when ML Select is active)
+        # Comparison panel state (shown when ML Select or SA is active)
         self._comparison_visible = False
         self._comparison_mpl_canvas = None
         self._ml_chosen_sk = None
         self._ml_chosen_id = None   # full solver id from ml_choice event
         self._oracle_id = None      # actual best solver from comparison data
         self._last_comparison_data = None  # (heights_dict, times_dict)
+        self._current_solver_id = ""       # id of the solver currently running
+        self._sa_result = None             # (height, time) stored by SA done event
 
         self._build_ui()
 
@@ -519,13 +521,16 @@ class VisualizerApp:
 
         open(LOG_PATH, "w").close()
 
-        # Show comparison panel only for ML Select; hide for all other solvers
-        if solver_cfg["id"] == "ml":
+        self._current_solver_id = solver_cfg["id"]
+
+        # Show comparison panel for ML Select and SA; hide for all other solvers
+        if solver_cfg["id"] in ("ml", "sa"):
             self._ml_chosen_sk = None
             self._ml_chosen_id = None
             self._oracle_id = None
             self._oracle_label.config(text="")
             self._last_comparison_data = None
+            self._sa_result = None
             self._show_comparison_panel()
             threading.Thread(
                 target=self._run_all_solvers_thread,
@@ -586,6 +591,16 @@ class VisualizerApp:
     def _poll_log(self):
         try:
             with open(LOG_PATH, "r") as f:
+                # Detect truncation: the ML advisor writes ml_choice with "a" mode,
+                # then the chosen solver re-opens the file with "w" mode (truncating
+                # it).  If the poll already advanced _log_offset past the ml_choice
+                # event before the truncation, it would seek past the new content
+                # and miss all start/place/done events.  Reset offset when we
+                # detect that the file is shorter than our current position.
+                f.seek(0, 2)          # seek to end to measure file size
+                file_size = f.tell()
+                if file_size < self._log_offset:
+                    self._log_offset = 0
                 f.seek(self._log_offset)
                 for raw in f:
                     raw = raw.strip()
@@ -623,6 +638,10 @@ class VisualizerApp:
 
         if evt.get("event") == "search":
             delay = int(max(max(floor_ms // 3, 25), speed_ms))
+        elif evt.get("event") == "improvement":
+            # Show SA improvements at real speed but cap the wait so the
+            # animation doesn't stall when improvements are far apart.
+            delay = int(max(floor_ms, min(speed_ms, 400)))
         else:
             delay = int(max(floor_ms, speed_ms))
 
@@ -689,12 +708,20 @@ class VisualizerApp:
             self._stat_time.set(f"{t:.4f}s")
             self._stat_sort.set(sk)
             self._draw_border(h)
-            # If ML panel is visible, store chosen solver key and refresh chart
+            # Refresh comparison panel if visible
             if self._comparison_visible:
                 self._ml_chosen_sk = sk
-                if self._last_comparison_data is not None:
-                    heights_d, times_d = self._last_comparison_data
-                    self._draw_comparison_chart(heights_d, times_d)
+                if self._current_solver_id == "sa":
+                    # SA finished: store its result and add it to the chart
+                    self._sa_result = (h, t)
+                    self._ml_chosen_id = "sa"
+                    if self._last_comparison_data is not None:
+                        heights_d, times_d = self._last_comparison_data
+                        heights_d["sa"] = h
+                        times_d["sa"] = t
+                        self._draw_comparison_chart(heights_d, times_d)
+                elif self._last_comparison_data is not None:
+                    self._draw_comparison_chart(*self._last_comparison_data)
             self._log_line(
                 f"DONE   height={h}  gap={gap:.1f}%  "
                 f"sort/status={sk}  time={t:.4f}s"
@@ -706,6 +733,25 @@ class VisualizerApp:
             for btn in self._solver_btns:
                 btn.config(state=tk.NORMAL)
             self._stop_btn.config(state=tk.DISABLED)
+
+        elif etype == "improvement":
+            # SA found a better permutation: replace the entire packing display.
+            self._placements_list = [
+                (p[0], p[1], p[2], p[3], _COLORS[i % len(_COLORS)], i + 1)
+                for i, p in enumerate(evt.get("placements", []))
+            ]
+            h = evt.get("height", self._current_height)
+            self._current_height = h
+            gap = (h - self._area_lb) / self._area_lb * 100 if self._area_lb else 0
+            self._stat_h.set(str(h))
+            self._stat_gap.set(f"{gap:.1f}%")
+            iters = evt.get("iteration", 0)
+            self._stat_sort.set("SA  init" if iters == 0 else f"SA  iter {iters}")
+            self._redraw_canvas()
+            self._log_line(
+                f"  SA {'init' if iters == 0 else f'iter {iters:>5}'}:  "
+                f"H \u2192 {h}  gap={gap:.1f}%"
+            )
 
         elif etype == "ml_choice":
             self._ml_chosen_id = evt.get("chosen_id", "?")
@@ -928,8 +974,13 @@ class VisualizerApp:
     def _update_comparison_chart(self, heights, times):
         """Store comparison results, compute oracle, and render the chart."""
         self._last_comparison_data = (heights, times)
-        # oracle = solver with the lowest height (ties broken alphabetically)
+        # oracle = best among the fast heuristics (SA excluded from oracle)
         self._oracle_id = min(heights, key=lambda k: (heights[k], k))
+        # If SA already finished before the heuristics thread completed, add it
+        if self._sa_result is not None and self._current_solver_id == "sa":
+            heights["sa"] = self._sa_result[0]
+            times["sa"] = self._sa_result[1]
+            self._ml_chosen_id = "sa"
         self._draw_comparison_chart(heights, times)
 
     def _draw_comparison_chart(self, heights, times):
@@ -957,15 +1008,21 @@ class VisualizerApp:
             "nfdh": "NFDH",         "ffdh": "FFDH",
             "sky_height": "Sky\nH", "sky_width": "Sky\nW",
             "sky_area":   "Sky\nA", "sky_perimeter": "Sky\nP",
+            "sa": "SA\n10s",
         }
         labels = [short_labels.get(n, n) for n in names]
 
         # Colour coding:
-        #   gold (#EDC948)  — ML chose this AND it is the oracle (correct!)
+        #   gold (#EDC948)  — ML chose this AND it is the oracle / SA beats oracle
         #   orange (#F28E2B) — ML chose this but it is NOT the oracle (wrong)
-        #   green (#59A14F)  — oracle (actual best), not ML choice
+        #   brown (#7A4F1D) — SA result (when SA panel is shown and SA is worse)
+        #   green (#59A14F)  — oracle (actual best), not ML/SA choice
         #   blue (#4E79A7)   — all others
         def _bar_color(n):
+            if n == "sa":
+                sa_h  = heights.get("sa", float("inf"))
+                ora_h = heights.get(oracle_name, float("inf")) if oracle_name else float("inf")
+                return "#EDC948" if sa_h <= ora_h else "#7A4F1D"
             is_ml     = (n == chosen_name)
             is_oracle = (n == oracle_name)
             if is_ml and is_oracle:
@@ -1031,11 +1088,16 @@ class VisualizerApp:
                      fontsize=5.5, color="#DDDDEE")
 
         # ── Supra-title ───────────────────────────────────────────────────
-        if chosen_name:
+        if self._current_solver_id == "sa" and "sa" in heights:
+            sa_h  = heights["sa"]
+            ora_h = heights.get(oracle_name, float("inf")) if oracle_name else float("inf")
+            title_text  = f"SA: H={sa_h}  (oracle {oracle_name}: H={ora_h})"
+            title_color = "#EDC948" if sa_h <= ora_h else "#7A4F1D"
+        elif chosen_name:
             title_text = f"ML chose: {chosen_name}"
             title_color = "#EDC948" if chosen_name == oracle_name else "#F28E2B"
         else:
-            title_text = "All Solvers Comparison"
+            title_text = "Running comparison…"
             title_color = "#CCCCDD"
         fig.text(0.5, 0.965, title_text, ha="center", va="top",
                  fontsize=7.5, color=title_color, fontweight="bold")
@@ -1046,7 +1108,20 @@ class VisualizerApp:
         self._comparison_mpl_canvas = mpl_canvas
 
         # ── Oracle verdict label ──────────────────────────────────────────
-        if chosen_name and oracle_name:
+        if self._current_solver_id == "sa" and "sa" in heights and oracle_name:
+            sa_h  = heights["sa"]
+            ora_h = heights[oracle_name]
+            if sa_h <= ora_h:
+                self._oracle_label.config(
+                    text=f"✓ SA wins — oracle: {oracle_name} (H={ora_h})",
+                    fg="#EDC948",
+                )
+            else:
+                self._oracle_label.config(
+                    text=f"SA: H={sa_h}  |  oracle: {oracle_name} (H={ora_h})",
+                    fg="#F28E2B",
+                )
+        elif chosen_name and oracle_name:
             if chosen_name == oracle_name:
                 self._oracle_label.config(
                     text=f"✓ ML correct — oracle: {oracle_name}",
