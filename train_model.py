@@ -65,7 +65,7 @@ from solver_shelf import solve_nfdh, solve_ffdh
 from solver_skyline import solve_skyline
 
 # -- Candidate solvers ---------------------------------------------------------
-# Each entry: (solver_id, callable(instance) → dict with "height" key).
+# Each entry: (solver_id, callable(instance) -> dict with "height" key).
 # Indices 0-9 are the class labels for both the RF and MLP classifiers.
 
 SOLVER_CANDIDATES = [
@@ -95,9 +95,9 @@ class StripPackingMLP(nn.Module):
 
     Architecture:
         Input  (17)
-        → Linear(64) → ReLU → Dropout(p=0.2)
-        → Linear(32) → ReLU
-        → Linear(n_classes)   [raw logits; softmax applied by loss / inference]
+        -> Linear(64) -> ReLU -> Dropout(p=0.2)
+        -> Linear(32) -> ReLU
+        -> Linear(n_classes)   [raw logits; softmax applied by loss / inference]
     """
 
     def __init__(self, input_dim: int = 17, n_classes: int = 10):
@@ -135,7 +135,7 @@ def collect_data(instances):
 
     print(f"Running {n_solvers} solvers × {n_inst} instances …\n")
     header = "  ".join(f"{name:>13}" for name in SOLVER_NAMES)
-    print(f"{'Instance':>{w_name}}  {header}  → best")
+    print(f"{'Instance':>{w_name}}  {header}  -> best")
     print("-" * (w_name + n_solvers * 15 + 10))
 
     for inst in instances:
@@ -147,7 +147,7 @@ def collect_data(instances):
         y.append(best_idx)
 
         row = "  ".join(f"{h:>13d}" for h in heights)
-        print(f"{inst.name:>{w_name}}  {row}  → {SOLVER_NAMES[best_idx]}")
+        print(f"{inst.name:>{w_name}}  {row}  -> {SOLVER_NAMES[best_idx]}")
 
     return np.array(X, dtype=float), np.array(y, dtype=int), all_heights
 
@@ -354,7 +354,7 @@ def evaluate_on_test_set(rf_clf, mlp, scaler, n_test: int = 100):
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
-    print(f"\n  Saved → {csv_path}")
+    print(f"\n  Saved -> {csv_path}")
 
     return {
         "rf_accuracy":   rf_correct / n,
@@ -399,7 +399,7 @@ def main():
         "feature_names": FEATURE_NAMES,
     }
     joblib.dump(rf_bundle, RF_MODEL_PATH)
-    print(f"\nSaved → {RF_MODEL_PATH}")
+    print(f"\nSaved -> {RF_MODEL_PATH}")
 
     # -- 3. Train PyTorch MLP --------------------------------------------------
     print("\n" + "═" * 70)
@@ -418,12 +418,12 @@ def main():
             "n_classes":     len(SOLVER_CANDIDATES),
         }
         joblib.dump(nn_bundle, MLP_MODEL_PATH)
-        print(f"Saved → {MLP_MODEL_PATH}")
+        print(f"Saved -> {MLP_MODEL_PATH}")
 
     # -- 4. Evaluate on held-out test set --------------------------------------
     evaluate_on_test_set(rf_clf, mlp, scaler)
 
-    print("\nDone.  Run the visualizer and press  🤖 ML Select  to use the models.")
+    print("\nDone. Run the visualizer and press 'ML Select' to use the models.")
 
 
 if __name__ == "__main__":

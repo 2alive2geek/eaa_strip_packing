@@ -4,8 +4,8 @@ Strip Packing Solver & Visualizer
 Animated visualization of strip packing solvers.
 
 Log format (JSONL):
-    heuristic: start → search* → place → ... → done
-    exact:     start → done (placements embedded in done event)
+    heuristic: start -> search* -> place -> ... -> done
+    exact:     start -> done (placements embedded in done event)
 
 Playback speed: each step is shown for
     max(slider_floor_ms,  inter_event_elapsed_ms / 0.75)
@@ -668,7 +668,7 @@ class VisualizerApp:
             self._redraw_canvas()
             self._log_line(
                 f"  step {evt['step']:>3d}:  try  ({x:>4d},{y:>4d})  "
-                f"{w}×{h}  → overlap, skip"
+                f"{w}×{h}  -> overlap, skip"
             )
 
         elif etype == "place":
@@ -684,7 +684,7 @@ class VisualizerApp:
             self._stat_gap.set(f"{gap:.1f}%")
             self._log_line(
                 f"  step {evt['step']:>3d}:  place ({x:>4d},{y:>4d})  "
-                f"{w}×{h}  H → {self._current_height}"
+                f"{w}×{h}  H -> {self._current_height}"
             )
 
         elif etype == "done":
@@ -1000,7 +1000,7 @@ class VisualizerApp:
 
         names  = list(heights.keys())
         h_vals = [heights[n] for n in names]
-        t_vals = [times[n] * 1000 for n in names]   # → milliseconds
+        t_vals = [times[n] * 1000 for n in names]   # -> milliseconds
 
         short_labels = {
             "blf_height": "BLF\nH", "blf_width": "BLF\nW",

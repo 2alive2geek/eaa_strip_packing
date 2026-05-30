@@ -53,7 +53,7 @@ from solver_skyline import _find_skyline_position, _update_skyline
 
 
 # ---------------------------------------------------------------------------
-# Inner evaluator (permutation → strip height)
+# Inner evaluator (permutation -> strip height)
 # ---------------------------------------------------------------------------
 
 def _eval_perm(

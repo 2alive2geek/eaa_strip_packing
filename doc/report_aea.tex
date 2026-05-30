@@ -506,22 +506,35 @@ spread horizontally for clarity; all represent $n=20$ instances.}
 
 \subsection{Gap Distribution per Family}
 
-Table~\ref{tab:family_summary} summarises mean and maximum gap per benchmark
-family for BLF (best-of-four).
+Table~\ref{tab:family_summary} compares mean gap to the area lower bound for
+all ten heuristic methods across the three benchmark families.
+NFDH and FFDH are shelf heuristics; BLF and Skyline each offer four sort-order
+variants (DH/DW/DA/DP), with the best-of-four also reported.
+BLF consistently dominates: its best-of-four achieves the lowest mean gap on
+every family, while NFDH is the weakest method by a large margin.
 
 \begin{table}[h]
 \centering
-\caption{Summary of BLF gap statistics per benchmark family (60 instances total).}
+\caption{Mean gap to area lower bound (\%) per benchmark family for all ten
+         heuristic methods (60 training instances; best value per row in
+         \textbf{bold}).}
 \label{tab:family_summary}
-\begin{tabular}{lrrrrr}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l r rr rrrrr r}
 \toprule
-Family & Instances & Mean gap & Max gap & Min gap & Std gap \\
+& &
+  \multicolumn{2}{c}{Shelf} &
+  \multicolumn{5}{c}{BLF} &
+  Skyline \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-9}
+Family & $N$ & NFDH & FFDH & DH & DW & DA & DP & best & best \\
 \midrule
-Bengtsson      & 10 & 7.02\% & 12.69\% &  2.85\% & 3.35\% \\
-Berkey \& Wang & 30 & 7.61\% & 14.71\% &  0.97\% & 4.17\% \\
-Martello \& Vigo & 20 & 9.31\% & 21.53\% & 2.22\% & 4.83\% \\
+Bengtsson        & 10 & 33.32 & 12.70 & 13.77 &  7.35 &  7.95 &  9.42 & \textbf{7.02} & 25.30 \\
+Berkey \& Wang   & 30 & 25.94 & 13.39 & 10.26 & 11.77 & 10.59 &  9.82 & \textbf{7.52} & 19.44 \\
+Martello \& Vigo & 20 & 27.54 & 13.01 & 13.02 & 11.05 & 11.84 & 11.86 & \textbf{9.39} & 23.11 \\
 \midrule
-\textbf{Overall} & \textbf{60} & \textbf{8.05\%} & \textbf{21.53\%} & \textbf{0.97\%} & \textbf{4.26\%} \\
+\textbf{Overall} & \textbf{60} & 27.70 & 13.15 & 11.77 & 10.79 & 10.57 & 10.43 & \textbf{8.06} & 21.64 \\
 \bottomrule
 \end{tabular}
 \end{table}
