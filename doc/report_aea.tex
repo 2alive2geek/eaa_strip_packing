@@ -651,6 +651,55 @@ ten candidates.
 On the test set the oracle distribution is:
 BLF-DW 33, BLF-DH 19, BLF-DA 18, BLF-DP 16, FFDH 14
 (again, no Skyline variant wins the oracle contest).
+Figure~\ref{fig:selection_dist} compares these true best-performer counts
+against the algorithms actually chosen by RF and MLP.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar,
+    bar width  = 9pt,
+    width      = 13cm,
+    height     = 6.5cm,
+    symbolic x coords = {BLF-DW, BLF-DH, BLF-DA, BLF-DP, FFDH},
+    xtick      = data,
+    xlabel     = {Algorithm},
+    ylabel     = {Times selected (out of 100)},
+    ymin = 0, ymax = 60,
+    ymajorgrids = true,
+    grid style  = {dotted, gray!40},
+    legend pos  = north east,
+    legend style = {font=\small},
+    tick label style = {font=\small},
+    label style = {font=\small},
+    nodes near coords,
+    nodes near coords style = {font=\tiny, /pgf/number format/fixed},
+    enlarge x limits = 0.12,
+]
+% Oracle (true best performer)
+\addplot[fill=teal!65!black, draw=teal!30!black]
+    coordinates {(BLF-DW,33)(BLF-DH,19)(BLF-DA,18)(BLF-DP,16)(FFDH,14)};
+\addlegendentry{Oracle}
+% Random Forest predictions
+\addplot[fill={rgb,1:red,0.31;green,0.56;blue,0.65}, draw=blue!50]
+    coordinates {(BLF-DW,49)(BLF-DH,20)(BLF-DA,12)(BLF-DP,7)(FFDH,12)};
+\addlegendentry{RF}
+% MLP predictions
+\addplot[fill=orange!70, draw=orange!90!black]
+    coordinates {(BLF-DW,32)(BLF-DH,16)(BLF-DA,27)(BLF-DP,16)(FFDH,9)};
+\addlegendentry{MLP}
+\end{axis}
+\end{tikzpicture}
+\caption{Algorithm selection frequency on 100 test instances: oracle (true
+         best performer) vs.\ RF vs.\ MLP predictions.
+         RF over-selects BLF-DW (49 vs.\ 33 actual) and severely under-selects
+         BLF-DP (7 vs.\ 16), biasing towards width-sorted BLF.
+         MLP over-selects BLF-DA (27 vs.\ 18 actual) and under-selects FFDH
+         (9 vs.\ 14), reflecting different learned feature interactions.
+         No model ever selects any Skyline variant.}
+\label{fig:selection_dist}
+\end{figure}
 
 \begin{table}[h]
 \centering
